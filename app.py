@@ -11,7 +11,7 @@ import qrcode
 from io import BytesIO
 import base64
 
-from database import SessionLocal, Material, Property, Image, Metadata, init_db
+from database import SessionLocal, Material, Property, Image, MaterialMetadata, init_db
 from card_generator import generate_material_card
 from models import MaterialCard
 

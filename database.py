@@ -31,7 +31,7 @@ class Material(Base):
     # リレーション
     properties = relationship("Property", back_populates="material", cascade="all, delete-orphan")
     images = relationship("Image", back_populates="material", cascade="all, delete-orphan")
-    metadata = relationship("Metadata", back_populates="material", cascade="all, delete-orphan")
+    metadata_items = relationship("MaterialMetadata", back_populates="material", cascade="all, delete-orphan")
 
 
 class Property(Base):
@@ -63,9 +63,9 @@ class Image(Base):
     material = relationship("Material", back_populates="images")
 
 
-class Metadata(Base):
+class MaterialMetadata(Base):
     """メタデータテーブル"""
-    __tablename__ = "metadata"
+    __tablename__ = "material_metadata"
 
     id = Column(Integer, primary_key=True, index=True)
     material_id = Column(Integer, ForeignKey("materials.id"), nullable=False)
@@ -73,7 +73,7 @@ class Metadata(Base):
     value = Column(Text)
 
     # リレーション
-    material = relationship("Material", back_populates="metadata")
+    material = relationship("Material", back_populates="metadata_items")
 
 
 # データベーステーブルの作成
