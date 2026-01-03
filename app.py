@@ -1,6 +1,6 @@
 """
 StreamlitベースのWebアプリケーション
-リッチなUIを持つマテリアルデータベース
+マテリアル感のあるリッチなUI
 """
 import streamlit as st
 import os
@@ -33,183 +33,386 @@ st.set_page_config(
     menu_items=None
 )
 
-# リッチなカスタムCSS
-st.markdown("""
-<style>
-    /* メインスタイル */
-    .stApp {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
-        background-attachment: fixed;
-    }
+# 画像パスの取得（複数のパスを試す）
+def get_image_path(filename):
+    """画像パスを取得"""
+    possible_paths = [
+        Path("static/images") / filename,
+        Path("写真") / filename,
+        Path(filename)
+    ]
     
-    .main .block-container {
+    for path in possible_paths:
+        if path.exists():
+            return str(path)
+    return None
+
+def get_base64_image(image_path):
+    """画像をBase64エンコード"""
+    if image_path and os.path.exists(image_path):
+        try:
+            with open(image_path, "rb") as img_file:
+                return base64.b64encode(img_file.read()).decode()
+        except Exception as e:
+            print(f"画像読み込みエラー: {e}")
+            return None
+    return None
+
+# 背景画像の読み込み
+main_bg_path = get_image_path("メイン.webp")
+sub_bg_path = get_image_path("サブ.webp")
+main_bg_base64 = get_base64_image(main_bg_path) if main_bg_path else None
+sub_bg_base64 = get_base64_image(sub_bg_path) if sub_bg_path else None
+
+# マテリアル感のあるカスタムCSS
+st.markdown(f"""
+<style>
+    /* メイン背景 - メイン.webpを使用 */
+    .stApp {{
+        background: {'url("data:image/webp;base64,' + main_bg_base64 + '")' if main_bg_base64 else 'linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%)'};
+        background-size: cover;
+        background-position: center;
+        background-attachment: fixed;
+        background-repeat: no-repeat;
+        position: relative;
+    }}
+    
+    .stApp::before {{
+        content: '';
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(255, 255, 255, 0.85);
+        z-index: 0;
+        pointer-events: none;
+    }}
+    
+    .main .block-container {{
         padding-top: 2rem;
         padding-bottom: 2rem;
-    }
+        position: relative;
+        z-index: 1;
+    }}
     
-    /* ヘッダー */
-    .main-header {
-        font-size: 4rem;
+    /* ヘッダー - マテリアル感のあるデザイン */
+    .main-header {{
+        font-size: 4.5rem;
         font-weight: 900;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        background-clip: text;
+        color: #2c3e50;
         text-align: center;
         margin-bottom: 1rem;
-        text-shadow: 0 4px 20px rgba(102, 126, 234, 0.3);
-        animation: fadeInDown 0.8s ease-out;
-    }
+        text-shadow: 2px 2px 8px rgba(255, 255, 255, 0.8),
+                     -1px -1px 2px rgba(0, 0, 0, 0.1);
+        letter-spacing: 2px;
+        position: relative;
+        z-index: 2;
+    }}
     
-    @keyframes fadeInDown {
-        from {
-            opacity: 0;
-            transform: translateY(-20px);
-        }
-        to {
-            opacity: 1;
-            transform: translateY(0);
-        }
-    }
+    .main-header::after {{
+        content: '';
+        display: block;
+        width: 100px;
+        height: 4px;
+        background: linear-gradient(90deg, transparent, #667eea, transparent);
+        margin: 20px auto;
+        border-radius: 2px;
+    }}
     
-    /* カードスタイル */
-    .material-card-container {
-        background: white;
+    /* サブ背景画像を装飾として使用 */
+    .material-decoration {{
+        position: absolute;
+        opacity: 0.15;
+        z-index: 0;
+        pointer-events: none;
+    }}
+    
+    .decoration-1 {{
+        top: 10%;
+        right: 5%;
+        width: 200px;
+        height: 200px;
+        background: {'url("data:image/webp;base64,' + sub_bg_base64 + '")' if sub_bg_base64 else 'none'};
+        background-size: contain;
+        background-repeat: no-repeat;
+        transform: rotate(15deg);
+    }}
+    
+    .decoration-2 {{
+        bottom: 10%;
+        left: 5%;
+        width: 150px;
+        height: 150px;
+        background: {'url("data:image/webp;base64,' + sub_bg_base64 + '")' if sub_bg_base64 else 'none'};
+        background-size: contain;
+        background-repeat: no-repeat;
+        transform: rotate(-15deg);
+    }}
+    
+    /* カードスタイル - マテリアル感 */
+    .material-card-container {{
+        background: rgba(255, 255, 255, 0.95);
+        backdrop-filter: blur(10px);
+        border-radius: 24px;
+        padding: 35px;
+        margin: 25px 0;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12),
+                    0 2px 8px rgba(0, 0, 0, 0.08),
+                    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+        transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        border: 1px solid rgba(255, 255, 255, 0.8);
+        position: relative;
+        overflow: hidden;
+    }}
+    
+    .material-card-container::before {{
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 4px;
+        background: linear-gradient(90deg, #667eea, #764ba2, #f093fb);
+        opacity: 0.6;
+    }}
+    
+    .material-card-container:hover {{
+        transform: translateY(-8px) scale(1.02);
+        box-shadow: 0 16px 48px rgba(102, 126, 234, 0.25),
+                    0 4px 16px rgba(0, 0, 0, 0.12),
+                    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+        border-color: rgba(102, 126, 234, 0.3);
+    }}
+    
+    /* カテゴリバッジ - マテリアル感 */
+    .category-badge {{
+        display: inline-block;
+        background: linear-gradient(135deg, rgba(102, 126, 234, 0.9) 0%, rgba(118, 75, 162, 0.9) 100%);
+        color: white;
+        padding: 10px 24px;
+        border-radius: 30px;
+        font-size: 13px;
+        font-weight: 700;
+        margin: 8px 8px 0 0;
+        box-shadow: 0 4px 16px rgba(102, 126, 234, 0.4),
+                    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+    }}
+    
+    /* 統計カード - ガラスモーフィズム */
+    .stat-card {{
+        background: rgba(255, 255, 255, 0.9);
+        backdrop-filter: blur(20px);
         border-radius: 20px;
         padding: 30px;
-        margin: 20px 0;
-        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
-        transition: all 0.3s ease;
-        border: 1px solid rgba(102, 126, 234, 0.1);
-    }
-    
-    .material-card-container:hover {
-        transform: translateY(-5px);
-        box-shadow: 0 20px 60px rgba(102, 126, 234, 0.2);
-    }
-    
-    .category-badge {
-        display: inline-block;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
-        padding: 8px 20px;
-        border-radius: 25px;
-        font-size: 13px;
-        font-weight: 600;
-        margin: 5px 5px 0 0;
-        box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
-    }
-    
-    /* 統計カード */
-    .stat-card {
-        background: white;
-        border-radius: 15px;
-        padding: 25px;
         text-align: center;
-        box-shadow: 0 5px 20px rgba(0, 0, 0, 0.08);
-        transition: all 0.3s ease;
-        border-left: 4px solid #667eea;
-    }
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1),
+                    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+        transition: all 0.4s ease;
+        border: 1px solid rgba(255, 255, 255, 0.5);
+        border-left: 5px solid #667eea;
+        position: relative;
+        overflow: hidden;
+    }}
     
-    .stat-card:hover {
-        transform: translateY(-3px);
-        box-shadow: 0 10px 30px rgba(102, 126, 234, 0.2);
-    }
+    .stat-card::before {{
+        content: '';
+        position: absolute;
+        top: -50%;
+        right: -50%;
+        width: 200%;
+        height: 200%;
+        background: radial-gradient(circle, rgba(102, 126, 234, 0.1) 0%, transparent 70%);
+        animation: rotate 20s linear infinite;
+    }}
     
-    .stat-value {
-        font-size: 2.5rem;
+    @keyframes rotate {{
+        from {{ transform: rotate(0deg); }}
+        to {{ transform: rotate(360deg); }}
+    }}
+    
+    .stat-card:hover {{
+        transform: translateY(-5px) scale(1.05);
+        box-shadow: 0 12px 40px rgba(102, 126, 234, 0.2),
+                    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+    }}
+    
+    .stat-value {{
+        font-size: 3rem;
         font-weight: 900;
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
-        margin: 10px 0;
-    }
+        margin: 15px 0;
+        position: relative;
+        z-index: 1;
+    }}
     
-    .stat-label {
-        color: #666;
-        font-size: 0.9rem;
-        font-weight: 500;
+    .stat-label {{
+        color: #555;
+        font-size: 0.95rem;
+        font-weight: 600;
         text-transform: uppercase;
-        letter-spacing: 1px;
-    }
+        letter-spacing: 1.5px;
+        position: relative;
+        z-index: 1;
+    }}
     
-    /* ボタンスタイル */
-    .stButton>button {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    /* ボタンスタイル - マテリアル感 */
+    .stButton>button {{
+        background: linear-gradient(135deg, rgba(102, 126, 234, 0.95) 0%, rgba(118, 75, 162, 0.95) 100%);
         color: white;
         border: none;
-        border-radius: 10px;
-        padding: 0.5rem 2rem;
-        font-weight: 600;
-        transition: all 0.3s ease;
-        box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
-    }
+        border-radius: 12px;
+        padding: 0.6rem 2.5rem;
+        font-weight: 700;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        box-shadow: 0 4px 16px rgba(102, 126, 234, 0.4),
+                    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        font-size: 14px;
+    }}
     
-    .stButton>button:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
-    }
+    .stButton>button:hover {{
+        transform: translateY(-3px);
+        box-shadow: 0 8px 24px rgba(102, 126, 234, 0.5),
+                    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+    }}
     
-    /* サイドバー */
-    [data-testid="stSidebar"] {
-        background: linear-gradient(180deg, #ffffff 0%, #f8f9ff 100%);
-    }
+    /* サイドバー - ガラスモーフィズム */
+    [data-testid="stSidebar"] {{
+        background: rgba(255, 255, 255, 0.85);
+        backdrop-filter: blur(20px);
+        border-right: 1px solid rgba(0, 0, 0, 0.1);
+    }}
     
-    [data-testid="stSidebar"] [data-testid="stMarkdownContainer"] {
-        color: #333;
-    }
+    [data-testid="stSidebar"] [data-testid="stMarkdownContainer"] {{
+        color: #2c3e50;
+    }}
     
-    /* 入力フィールド */
+    /* 入力フィールド - マテリアル感 */
     .stTextInput>div>div>input,
     .stTextArea>div>div>textarea,
-    .stSelectbox>div>div>select {
-        border-radius: 10px;
-        border: 2px solid #e0e0e0;
+    .stSelectbox>div>div>select {{
+        border-radius: 12px;
+        border: 2px solid rgba(0, 0, 0, 0.1);
+        background: rgba(255, 255, 255, 0.9);
+        backdrop-filter: blur(10px);
         transition: all 0.3s ease;
-    }
+        box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.05);
+    }}
     
     .stTextInput>div>div>input:focus,
     .stTextArea>div>div>textarea:focus,
-    .stSelectbox>div>div>select:focus {
+    .stSelectbox>div>div>select:focus {{
         border-color: #667eea;
-        box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
-    }
+        box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.15),
+                    inset 0 2px 4px rgba(0, 0, 0, 0.05);
+        background: rgba(255, 255, 255, 1);
+    }}
     
     /* メトリクス */
-    [data-testid="stMetricValue"] {
-        font-size: 2rem;
+    [data-testid="stMetricValue"] {{
+        font-size: 2.2rem;
         font-weight: 900;
-    }
-    
-    /* アニメーション */
-    @keyframes pulse {
-        0%, 100% {
-            opacity: 1;
-        }
-        50% {
-            opacity: 0.7;
-        }
-    }
-    
-    .pulse {
-        animation: pulse 2s infinite;
-    }
+        color: #2c3e50;
+    }}
     
     /* グラデーションテキスト */
-    .gradient-text {
+    .gradient-text {{
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
-        font-weight: 700;
-    }
+        font-weight: 800;
+        letter-spacing: 1px;
+    }}
+    
+    /* マテリアル装飾要素 */
+    .material-texture {{
+        position: relative;
+        overflow: hidden;
+    }}
+    
+    .material-texture::after {{
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: {'url("data:image/webp;base64,' + sub_bg_base64 + '")' if sub_bg_base64 else 'none'};
+        background-size: 200%;
+        background-position: center;
+        opacity: 0.03;
+        pointer-events: none;
+        mix-blend-mode: multiply;
+    }}
     
     /* カードグリッド */
-    .card-grid {
+    .card-grid {{
         display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-        gap: 20px;
-        margin: 20px 0;
-    }
+        grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+        gap: 25px;
+        margin: 30px 0;
+    }}
+    
+    /* ヒーローセクション */
+    .hero-section {{
+        background: rgba(255, 255, 255, 0.7);
+        backdrop-filter: blur(20px);
+        border-radius: 30px;
+        padding: 60px 40px;
+        text-align: center;
+        margin: 40px 0;
+        box-shadow: 0 12px 48px rgba(0, 0, 0, 0.15),
+                    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+        border: 1px solid rgba(255, 255, 255, 0.8);
+        position: relative;
+        overflow: hidden;
+    }}
+    
+    .hero-section::before {{
+        content: '';
+        position: absolute;
+        top: -50%;
+        left: -50%;
+        width: 200%;
+        height: 200%;
+        background: {'url("data:image/webp;base64,' + sub_bg_base64 + '")' if sub_bg_base64 else 'none'};
+        background-size: 50%;
+        opacity: 0.05;
+        animation: float 30s ease-in-out infinite;
+    }}
+    
+    @keyframes float {{
+        0%, 100% {{ transform: translate(0, 0) rotate(0deg); }}
+        50% {{ transform: translate(20px, 20px) rotate(5deg); }}
+    }}
+    
+    /* セクションタイトル */
+    .section-title {{
+        font-size: 2.5rem;
+        font-weight: 800;
+        color: #2c3e50;
+        margin: 40px 0 20px 0;
+        text-align: center;
+        position: relative;
+        padding-bottom: 20px;
+    }}
+    
+    .section-title::after {{
+        content: '';
+        display: block;
+        width: 80px;
+        height: 4px;
+        background: linear-gradient(90deg, transparent, #667eea, transparent);
+        margin: 15px auto 0;
+        border-radius: 2px;
+    }}
 </style>
 """, unsafe_allow_html=True)
 
@@ -341,16 +544,13 @@ def create_timeline_chart(materials):
 def main():
     # ヘッダー
     st.markdown('<h1 class="main-header">🔬 マテリアルデータベース</h1>', unsafe_allow_html=True)
-    st.markdown('<p style="text-align: center; color: white; font-size: 1.2rem; margin-bottom: 3rem;">素材の可能性を探索する、美しいデータベース</p>', unsafe_allow_html=True)
+    st.markdown('<p style="text-align: center; color: #555; font-size: 1.3rem; margin-bottom: 3rem; font-weight: 500;">素材の可能性を探索する、美しいデータベース</p>', unsafe_allow_html=True)
     
     # サイドバー
     with st.sidebar:
         st.markdown("""
         <div style="text-align: center; padding: 20px 0;">
-            <h2 style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                       -webkit-background-clip: text;
-                       -webkit-text-fill-color: transparent;
-                       margin: 0;">📋 メニュー</h2>
+            <h2 style="color: #2c3e50; margin: 0; font-weight: 800;">📋 メニュー</h2>
         </div>
         """, unsafe_allow_html=True)
         
@@ -403,14 +603,47 @@ def show_home():
     """ホームページ"""
     materials = get_all_materials()
     
-    # ヒーローセクション
-    col1, col2, col3 = st.columns([1, 2, 1])
-    with col2:
+    # サブ画像を装飾として表示
+    sub_img_path = get_image_path("サブ.webp")
+    if sub_img_path:
+        try:
+            sub_img = PILImage.open(sub_img_path)
+            # 画像をリサイズ
+            sub_img.thumbnail((300, 300), PILImage.Resampling.LANCZOS)
+            
+            # 装飾として配置
+            col1, col2, col3 = st.columns([1, 2, 1])
+            with col1:
+                st.image(sub_img, width=200, use_container_width=False)
+            with col2:
+                st.markdown("""
+                <div class="hero-section">
+                    <h2 style="color: #2c3e50; margin-bottom: 20px; font-size: 2.5rem; font-weight: 800;">✨ ようこそ！</h2>
+                    <p style="font-size: 1.2rem; color: #555; line-height: 1.8; max-width: 800px; margin: 0 auto; font-weight: 500;">
+                        素材カード形式でマテリアル情報を管理する、美しく使いやすいデータベースシステムです。<br>
+                        デザイナーやエンジニアが、材料の可能性を探索するためのツールです。
+                    </p>
+                </div>
+                """, unsafe_allow_html=True)
+            with col3:
+                st.image(sub_img, width=200, use_container_width=False)
+        except Exception as e:
+            # 画像読み込み失敗時は通常のヒーローセクション
+            st.markdown("""
+            <div class="hero-section">
+                <h2 style="color: #2c3e50; margin-bottom: 20px; font-size: 2.5rem; font-weight: 800;">✨ ようこそ！</h2>
+                <p style="font-size: 1.2rem; color: #555; line-height: 1.8; max-width: 800px; margin: 0 auto; font-weight: 500;">
+                    素材カード形式でマテリアル情報を管理する、美しく使いやすいデータベースシステムです。<br>
+                    デザイナーやエンジニアが、材料の可能性を探索するためのツールです。
+                </p>
+            </div>
+            """, unsafe_allow_html=True)
+    else:
+        # 画像がない場合の通常表示
         st.markdown("""
-        <div style="background: white; border-radius: 20px; padding: 40px; text-align: center; 
-                    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1); margin: 20px 0;">
-            <h2 style="color: #333; margin-bottom: 20px;">✨ ようこそ！</h2>
-            <p style="font-size: 1.1rem; color: #666; line-height: 1.8;">
+        <div class="hero-section">
+            <h2 style="color: #2c3e50; margin-bottom: 20px; font-size: 2.5rem; font-weight: 800;">✨ ようこそ！</h2>
+            <p style="font-size: 1.2rem; color: #555; line-height: 1.8; max-width: 800px; margin: 0 auto; font-weight: 500;">
                 素材カード形式でマテリアル情報を管理する、美しく使いやすいデータベースシステムです。<br>
                 デザイナーやエンジニアが、材料の可能性を探索するためのツールです。
             </p>
@@ -418,51 +651,66 @@ def show_home():
         """, unsafe_allow_html=True)
     
     # 機能紹介カード
-    st.markdown("### 🎯 主な機能")
+    st.markdown('<h3 class="section-title">🎯 主な機能</h3>', unsafe_allow_html=True)
     col1, col2, col3 = st.columns(3)
     
     with col1:
         st.markdown("""
         <div class="stat-card">
-            <div style="font-size: 3rem; margin-bottom: 10px;">📝</div>
-            <h3 style="color: #333;">材料登録</h3>
-            <p style="color: #666;">簡単に材料情報を登録・管理</p>
+            <div style="font-size: 3.5rem; margin-bottom: 15px;">📝</div>
+            <h3 style="color: #2c3e50; margin: 15px 0;">材料登録</h3>
+            <p style="color: #666; margin: 0;">簡単に材料情報を登録・管理</p>
         </div>
         """, unsafe_allow_html=True)
     
     with col2:
         st.markdown("""
         <div class="stat-card">
-            <div style="font-size: 3rem; margin-bottom: 10px;">📊</div>
-            <h3 style="color: #333;">データ可視化</h3>
-            <p style="color: #666;">グラフで材料データを分析</p>
+            <div style="font-size: 3.5rem; margin-bottom: 15px;">📊</div>
+            <h3 style="color: #2c3e50; margin: 15px 0;">データ可視化</h3>
+            <p style="color: #666; margin: 0;">グラフで材料データを分析</p>
         </div>
         """, unsafe_allow_html=True)
     
     with col3:
         st.markdown("""
         <div class="stat-card">
-            <div style="font-size: 3rem; margin-bottom: 10px;">🎨</div>
-            <h3 style="color: #333;">素材カード</h3>
-            <p style="color: #666;">美しい素材カードを自動生成</p>
+            <div style="font-size: 3.5rem; margin-bottom: 15px;">🎨</div>
+            <h3 style="color: #2c3e50; margin: 15px 0;">素材カード</h3>
+            <p style="color: #666; margin: 0;">美しい素材カードを自動生成</p>
         </div>
         """, unsafe_allow_html=True)
     
     # 最近登録された材料
     if materials:
-        st.markdown("### ⭐ 最近登録された材料")
+        st.markdown('<h3 class="section-title">⭐ 最近登録された材料</h3>', unsafe_allow_html=True)
         recent_materials = sorted(materials, key=lambda x: x.created_at if x.created_at else datetime.min, reverse=True)[:6]
         
         cols = st.columns(3)
         for idx, material in enumerate(recent_materials):
             with cols[idx % 3]:
                 with st.container():
+                    # サブ画像をカード内に装飾として追加
+                    sub_img_html = ""
+                    sub_img_path = get_image_path("サブ.webp")
+                    if sub_img_path:
+                        try:
+                            sub_img_small = PILImage.open(sub_img_path)
+                            sub_img_small.thumbnail((100, 100), PILImage.Resampling.LANCZOS)
+                            buffer = BytesIO()
+                            sub_img_small.save(buffer, format='WEBP')
+                            img_base64 = base64.b64encode(buffer.getvalue()).decode()
+                            sub_img_html = f'<div style="position: absolute; top: 10px; right: 10px; opacity: 0.1; width: 80px; height: 80px; background: url(\"data:image/webp;base64,{img_base64}\"); background-size: contain; background-repeat: no-repeat;"></div>'
+                        except:
+                            pass
+                    
                     st.markdown(f"""
-                    <div class="material-card-container">
-                        <h3 style="color: #667eea; margin-top: 0;">{material.name}</h3>
-                        <span class="category-badge">{material.category or '未分類'}</span>
-                        <p style="color: #666; margin-top: 15px;">{material.description[:100] if material.description else '説明なし'}...</p>
-                        <div style="margin-top: 15px;">
+                    <div class="material-card-container material-texture" style="position: relative;">
+                        {sub_img_html}
+                        <h3 style="color: #667eea; margin-top: 0; font-size: 1.4rem; font-weight: 700; position: relative; z-index: 1;">{material.name}</h3>
+                        <span class="category-badge" style="position: relative; z-index: 1;">{material.category or '未分類'}</span>
+                        <p style="color: #666; margin-top: 20px; line-height: 1.6; position: relative; z-index: 1;">{material.description[:100] if material.description else '説明なし'}...</p>
+                        <div style="margin-top: 20px; position: relative; z-index: 1;">
                             <small style="color: #999;">登録日: {material.created_at.strftime('%Y/%m/%d') if material.created_at else 'N/A'}</small>
                         </div>
                     </div>
@@ -470,7 +718,7 @@ def show_home():
     
     # 将来の機能
     st.markdown("---")
-    st.markdown("### 🚀 将来の機能（LLM統合予定）")
+    st.markdown('<h3 class="section-title">🚀 将来の機能（LLM統合予定）</h3>', unsafe_allow_html=True)
     
     future_features = [
         ("🤖", "自然言語検索", "「高強度で軽量な材料」など、自然な言葉で検索"),
@@ -483,17 +731,16 @@ def show_home():
     for idx, (icon, title, desc) in enumerate(future_features):
         with cols[idx]:
             st.markdown(f"""
-            <div style="background: white; border-radius: 15px; padding: 20px; 
-                        box-shadow: 0 5px 20px rgba(0, 0, 0, 0.08); height: 100%;">
-                <div style="font-size: 2.5rem; margin-bottom: 10px;">{icon}</div>
-                <h4 style="color: #333; margin: 10px 0;">{title}</h4>
-                <p style="color: #666; font-size: 0.9rem; margin: 0;">{desc}</p>
+            <div class="material-card-container" style="padding: 25px; text-align: center;">
+                <div style="font-size: 3rem; margin-bottom: 15px;">{icon}</div>
+                <h4 style="color: #2c3e50; margin: 15px 0; font-weight: 700;">{title}</h4>
+                <p style="color: #666; font-size: 0.95rem; margin: 0; line-height: 1.6;">{desc}</p>
             </div>
             """, unsafe_allow_html=True)
 
 def show_materials_list():
     """材料一覧ページ"""
-    st.markdown('<h2 class="gradient-text">📦 材料一覧</h2>', unsafe_allow_html=True)
+    st.markdown('<h2 class="gradient-text section-title">📦 材料一覧</h2>', unsafe_allow_html=True)
     
     materials = get_all_materials()
     
@@ -530,21 +777,21 @@ def show_materials_list():
                 if material.properties:
                     props = material.properties[:3]
                     properties_text = "<br>".join([
-                        f"<small>• {p.property_name}: <strong>{p.value} {p.unit or ''}</strong></small>"
+                        f"<small style='color: #666;'>• {p.property_name}: <strong style='color: #667eea;'>{p.value} {p.unit or ''}</strong></small>"
                         for p in props
                     ])
                 
                 st.markdown(f"""
-                <div class="material-card-container">
-                    <h3 style="color: #667eea; margin-top: 0; font-size: 1.3rem;">{material.name}</h3>
+                <div class="material-card-container material-texture">
+                    <h3 style="color: #667eea; margin-top: 0; font-size: 1.4rem; font-weight: 700;">{material.name}</h3>
                     <span class="category-badge">{material.category or '未分類'}</span>
-                    <p style="color: #666; margin: 15px 0; font-size: 0.95rem;">
+                    <p style="color: #666; margin: 20px 0; font-size: 0.95rem; line-height: 1.6;">
                         {material.description[:80] if material.description else '説明なし'}...
                     </p>
-                    <div style="margin: 15px 0;">
+                    <div style="margin: 20px 0;">
                         {properties_text}
                     </div>
-                    <div style="margin-top: 15px;">
+                    <div style="margin-top: 20px;">
                         <small style="color: #999;">ID: {material.id}</small>
                     </div>
                 </div>
@@ -554,70 +801,9 @@ def show_materials_list():
                     st.session_state['selected_material_id'] = material.id
                     st.rerun()
 
-def show_material_form():
-    """材料登録フォーム"""
-    st.markdown('<h2 class="gradient-text">➕ 材料登録</h2>', unsafe_allow_html=True)
-    
-    with st.form("material_form", clear_on_submit=False):
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            name = st.text_input("材料名 *", placeholder="例: ステンレス鋼 SUS304", help="材料の正式名称を入力してください")
-            category = st.selectbox(
-                "カテゴリ",
-                ["", "金属", "プラスチック", "セラミック", "複合材料", "その他"],
-                help="材料のカテゴリを選択"
-            )
-        
-        with col2:
-            description = st.text_area("説明", placeholder="材料の特徴、用途、説明を入力してください", height=100)
-        
-        st.markdown("### 📊 物性データ")
-        
-        # 動的な物性入力フィールド
-        if 'properties' not in st.session_state:
-            st.session_state.properties = [{'name': '', 'value': '', 'unit': ''}]
-        
-        properties = []
-        for i, prop in enumerate(st.session_state.properties):
-            col1, col2, col3 = st.columns([3, 2, 1])
-            with col1:
-                prop_name = st.text_input(f"物性名 {i+1}", value=prop['name'], key=f"prop_name_{i}", placeholder="例: 密度")
-            with col2:
-                prop_value = st.number_input(f"値 {i+1}", value=float(prop['value']) if prop['value'] else 0.0, key=f"prop_value_{i}", step=0.01)
-            with col3:
-                prop_unit = st.text_input(f"単位 {i+1}", value=prop['unit'], key=f"prop_unit_{i}", placeholder="例: g/cm³")
-            
-            properties.append({
-                'name': prop_name,
-                'value': prop_value,
-                'unit': prop_unit
-            })
-        
-        col1, col2 = st.columns([1, 4])
-        with col1:
-            if st.form_submit_button("➕ 物性を追加", use_container_width=True):
-                st.session_state.properties.append({'name': '', 'value': '', 'unit': ''})
-                st.rerun()
-        
-        submitted = st.form_submit_button("✅ 材料を登録", use_container_width=True, type="primary")
-        
-        if submitted:
-            if not name:
-                st.error("❌ 材料名は必須です")
-            else:
-                try:
-                    material = create_material(name, category if category else None, description, properties)
-                    st.success(f"✅ 材料「{material.name}」を登録しました！")
-                    st.balloons()
-                    st.session_state.properties = [{'name': '', 'value': '', 'unit': ''}]
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"❌ エラーが発生しました: {str(e)}")
-
 def show_dashboard():
     """ダッシュボードページ"""
-    st.markdown('<h2 class="gradient-text">📊 ダッシュボード</h2>', unsafe_allow_html=True)
+    st.markdown('<h2 class="gradient-text section-title">📊 ダッシュボード</h2>', unsafe_allow_html=True)
     
     materials = get_all_materials()
     
@@ -693,7 +879,7 @@ def show_dashboard():
 
 def show_search():
     """検索ページ"""
-    st.markdown('<h2 class="gradient-text">🔍 材料検索</h2>', unsafe_allow_html=True)
+    st.markdown('<h2 class="gradient-text section-title">🔍 材料検索</h2>', unsafe_allow_html=True)
     
     search_query = st.text_input("検索キーワード", placeholder="材料名、カテゴリ、説明などで検索...", key="search_input")
     
@@ -716,11 +902,11 @@ def show_search():
                 with cols[idx % 2]:
                     with st.container():
                         st.markdown(f"""
-                        <div class="material-card-container">
-                            <h3 style="color: #667eea; margin-top: 0;">{material.name}</h3>
+                        <div class="material-card-container material-texture">
+                            <h3 style="color: #667eea; margin-top: 0; font-size: 1.3rem; font-weight: 700;">{material.name}</h3>
                             <span class="category-badge">{material.category or '未分類'}</span>
-                            <p style="color: #666; margin: 15px 0;">{material.description or '説明なし'}</p>
-                            {f'<p><strong>物性データ:</strong> {len(material.properties)}個</p>' if material.properties else ''}
+                            <p style="color: #666; margin: 15px 0; line-height: 1.6;">{material.description or '説明なし'}</p>
+                            {f'<p style="color: #555;"><strong>物性データ:</strong> {len(material.properties)}個</p>' if material.properties else ''}
                         </div>
                         """, unsafe_allow_html=True)
         else:
@@ -728,7 +914,7 @@ def show_search():
 
 def show_material_cards():
     """素材カード表示ページ"""
-    st.markdown('<h2 class="gradient-text">📄 素材カード</h2>', unsafe_allow_html=True)
+    st.markdown('<h2 class="gradient-text section-title">📄 素材カード</h2>', unsafe_allow_html=True)
     
     materials = get_all_materials()
     

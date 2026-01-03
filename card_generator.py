@@ -1,14 +1,41 @@
 """
-素材カード生成モジュール - リッチなデザイン版
+素材カード生成モジュール - マテリアル感のあるリッチなデザイン版
 """
 from models import MaterialCard
 import qrcode
 from io import BytesIO
 import base64
+import os
+from pathlib import Path
+
+
+def get_image_path(filename):
+    """画像パスを取得"""
+    possible_paths = [
+        Path("static/images") / filename,
+        Path("写真") / filename,
+        Path(filename)
+    ]
+    
+    for path in possible_paths:
+        if path.exists():
+            return str(path)
+    return None
+
+
+def get_base64_image(image_path):
+    """画像をBase64エンコード"""
+    if image_path and os.path.exists(image_path):
+        try:
+            with open(image_path, "rb") as img_file:
+                return base64.b64encode(img_file.read()).decode()
+        except Exception:
+            return None
+    return None
 
 
 def generate_material_card(card_data: MaterialCard) -> str:
-    """素材カードのHTMLを生成（リッチなデザイン）"""
+    """素材カードのHTMLを生成（マテリアル感のあるリッチなデザイン）"""
     material = card_data.material
     primary_image = card_data.primary_image
     
@@ -22,6 +49,11 @@ def generate_material_card(card_data: MaterialCard) -> str:
     qr_buffer = BytesIO()
     qr_img.save(qr_buffer, format='PNG')
     qr_base64 = base64.b64encode(qr_buffer.getvalue()).decode()
+    
+    # 背景画像の読み込み（サブ.webpをテクスチャとして使用）
+    sub_bg_path = get_image_path("サブ.webp")
+    sub_bg_base64 = get_base64_image(sub_bg_path) if sub_bg_path else None
+    texture_bg = f'url("data:image/webp;base64,{sub_bg_base64}")' if sub_bg_base64 else 'none'
     
     # 画像パスの処理
     image_url = ""
@@ -69,18 +101,50 @@ def generate_material_card(card_data: MaterialCard) -> str:
                 font-family: 'Yu Gothic', '游ゴシック', 'Hiragino Sans', 'Meiryo', 'Helvetica Neue', Arial, sans-serif;
                 margin: 0;
                 padding: 30px;
-                background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
+                background: {texture_bg};
+                background-size: 300%;
+                background-position: center;
+                background-attachment: fixed;
                 min-height: 100vh;
+                position: relative;
+            }}
+            body::before {{
+                content: '';
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 50%, rgba(240, 147, 251, 0.1) 100%);
+                z-index: 0;
+                pointer-events: none;
             }}
             .card-container {{
                 max-width: 900px;
                 margin: 0 auto;
-                background: white;
+                background: rgba(255, 255, 255, 0.98);
+                backdrop-filter: blur(20px);
                 border-radius: 25px;
-                box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+                box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3),
+                            inset 0 1px 0 rgba(255, 255, 255, 0.9);
                 padding: 0;
                 overflow: hidden;
                 position: relative;
+                z-index: 1;
+                border: 1px solid rgba(255, 255, 255, 0.8);
+            }}
+            .card-container::after {{
+                content: '';
+                position: absolute;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                background: {texture_bg};
+                background-size: 200%;
+                opacity: 0.03;
+                pointer-events: none;
+                mix-blend-mode: multiply;
             }}
             .card-header {{
                 background: linear-gradient(135deg, {primary_color} 0%, {secondary_color} 100%);

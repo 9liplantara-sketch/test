@@ -13,4 +13,3 @@ requests>=2.31.0
 pydantic>=2.6.0
 plotly>=5.18.0
 streamlit-option-menu>=0.3.6
-pydantic>=2.6.0
