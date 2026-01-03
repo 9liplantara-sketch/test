@@ -70,19 +70,26 @@ sub_bg_base64 = get_base64_image(sub_bg_path) if sub_bg_path else None
 # 注意: この変数はmain()関数内で設定されるため、ここでは定義のみ
 debug_no_css = False
 
-# マテリアル感のあるカスタムCSS（条件付き適用）
+# WOTA風シンプルなカスタムCSS（視認性重視）
 def get_custom_css():
-    """カスタムCSSを生成（デバッグモード対応）"""
+    """カスタムCSSを生成（WOTA風シンプルデザイン）"""
     return f"""
 <style>
-    /* ベース文字色を確保（白飛び防止） */
-    html, body, [class*="st-"] {{
-        color: #111 !important;
+    /* ベースフォント - シンプルなサンセリフ（WOTA風） */
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+    
+    * {{
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif !important;
+    }}
+    
+    /* ベース文字色を確保（視認性向上） */
+    html, body, [class*="st-"], p, span, div, h1, h2, h3, h4, h5, h6 {{
+        color: #1a1a1a !important;
     }}
     
     /* メイン背景 - メイン.webpを使用 */
     .stApp {{
-        background: {'url("data:image/webp;base64,' + main_bg_base64 + '")' if main_bg_base64 else 'linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%)'};
+        background: {'url("data:image/webp;base64,' + main_bg_base64 + '")' if main_bg_base64 else '#f8f9fa'};
         background-size: cover;
         background-position: center;
         background-attachment: fixed;
@@ -98,7 +105,7 @@ def get_custom_css():
         left: 0;
         width: 100%;
         height: 100%;
-        background: rgba(255, 255, 255, 0.75);
+        background: rgba(255, 255, 255, 0.85);
         z-index: -1;
         pointer-events: none;
     }}
@@ -109,30 +116,30 @@ def get_custom_css():
         position: relative;
         z-index: 10;
         background: transparent;
+        max-width: 1200px;
     }}
     
-    /* ヘッダー - マテリアル感のあるデザイン */
+    /* ヘッダー - WOTA風シンプルデザイン */
     .main-header {{
-        font-size: 4.5rem;
-        font-weight: 900;
-        color: #2c3e50;
+        font-size: 3.5rem;
+        font-weight: 700;
+        color: #1a1a1a;
         text-align: center;
-        margin-bottom: 1rem;
-        text-shadow: 2px 2px 8px rgba(255, 255, 255, 0.8),
-                     -1px -1px 2px rgba(0, 0, 0, 0.1);
-        letter-spacing: 2px;
+        margin-bottom: 0.5rem;
+        letter-spacing: -0.02em;
         position: relative;
         z-index: 2;
+        line-height: 1.2;
     }}
     
     .main-header::after {{
         content: '';
         display: block;
-        width: 100px;
-        height: 4px;
-        background: linear-gradient(90deg, transparent, #667eea, transparent);
-        margin: 20px auto;
-        border-radius: 2px;
+        width: 60px;
+        height: 2px;
+        background: #1a1a1a;
+        margin: 24px auto;
+        border-radius: 1px;
     }}
     
     /* サブ背景画像を装飾として使用（非表示に変更 - 白飛び防止） */
@@ -152,18 +159,15 @@ def get_custom_css():
         display: none;
     }}
     
-    /* カードスタイル - マテリアル感 */
+    /* カードスタイル - WOTA風シンプル */
     .material-card-container {{
-        background: rgba(255, 255, 255, 0.95);
-        backdrop-filter: blur(10px);
-        border-radius: 24px;
-        padding: 35px;
-        margin: 25px 0;
-        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12),
-                    0 2px 8px rgba(0, 0, 0, 0.08),
-                    inset 0 1px 0 rgba(255, 255, 255, 0.9);
-        transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-        border: 1px solid rgba(255, 255, 255, 0.8);
+        background: #ffffff;
+        border-radius: 0;
+        padding: 32px;
+        margin: 24px 0;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+        transition: all 0.2s ease;
+        border: 1px solid rgba(0, 0, 0, 0.08);
         position: relative;
         overflow: hidden;
     }}
@@ -174,164 +178,166 @@ def get_custom_css():
         top: 0;
         left: 0;
         right: 0;
-        height: 4px;
-        background: linear-gradient(90deg, #667eea, #764ba2, #f093fb);
-        opacity: 0.6;
+        height: 2px;
+        background: #1a1a1a;
+        opacity: 1;
     }}
     
     .material-card-container:hover {{
-        transform: translateY(-8px) scale(1.02);
-        box-shadow: 0 16px 48px rgba(102, 126, 234, 0.25),
-                    0 4px 16px rgba(0, 0, 0, 0.12),
-                    inset 0 1px 0 rgba(255, 255, 255, 0.9);
-        border-color: rgba(102, 126, 234, 0.3);
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+        border-color: rgba(0, 0, 0, 0.15);
     }}
     
-    /* カテゴリバッジ - マテリアル感 */
+    /* カテゴリバッジ - WOTA風シンプル */
     .category-badge {{
         display: inline-block;
-        background: linear-gradient(135deg, rgba(102, 126, 234, 0.9) 0%, rgba(118, 75, 162, 0.9) 100%);
-        color: white;
-        padding: 10px 24px;
-        border-radius: 30px;
-        font-size: 13px;
-        font-weight: 700;
+        background: #1a1a1a;
+        color: #ffffff;
+        padding: 6px 16px;
+        border-radius: 2px;
+        font-size: 12px;
+        font-weight: 500;
         margin: 8px 8px 0 0;
-        box-shadow: 0 4px 16px rgba(102, 126, 234, 0.4),
-                    inset 0 1px 0 rgba(255, 255, 255, 0.3);
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-        border: 1px solid rgba(255, 255, 255, 0.2);
+        box-shadow: none;
+        text-transform: none;
+        letter-spacing: 0;
+        border: none;
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     }}
     
-    /* 統計カード - ガラスモーフィズム */
+    /* 統計カード - WOTA風シンプル */
     .stat-card {{
-        background: rgba(255, 255, 255, 0.9);
-        backdrop-filter: blur(20px);
-        border-radius: 20px;
-        padding: 30px;
+        background: #ffffff;
+        border-radius: 0;
+        padding: 32px;
         text-align: center;
-        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1),
-                    inset 0 1px 0 rgba(255, 255, 255, 0.9);
-        transition: all 0.4s ease;
-        border: 1px solid rgba(255, 255, 255, 0.5);
-        border-left: 5px solid #667eea;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+        transition: all 0.2s ease;
+        border: 1px solid rgba(0, 0, 0, 0.08);
+        border-top: 2px solid #1a1a1a;
         position: relative;
         overflow: hidden;
     }}
     
-    .stat-card::before {{
-        content: '';
-        position: absolute;
-        top: -50%;
-        right: -50%;
-        width: 200%;
-        height: 200%;
-        background: radial-gradient(circle, rgba(102, 126, 234, 0.1) 0%, transparent 70%);
-        animation: rotate 20s linear infinite;
-    }}
-    
-    @keyframes rotate {{
-        from {{ transform: rotate(0deg); }}
-        to {{ transform: rotate(360deg); }}
-    }}
-    
     .stat-card:hover {{
-        transform: translateY(-5px) scale(1.05);
-        box-shadow: 0 12px 40px rgba(102, 126, 234, 0.2),
-                    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
     }}
     
     .stat-value {{
-        font-size: 3rem;
-        font-weight: 900;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
+        font-size: 2.5rem;
+        font-weight: 600;
+        color: #1a1a1a;
         margin: 15px 0;
         position: relative;
         z-index: 1;
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     }}
     
     .stat-label {{
-        color: #555;
-        font-size: 0.95rem;
-        font-weight: 600;
-        text-transform: uppercase;
-        letter-spacing: 1.5px;
+        color: #666666;
+        font-size: 14px;
+        font-weight: 400;
+        text-transform: none;
+        letter-spacing: 0;
         position: relative;
         z-index: 1;
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     }}
     
-    /* ボタンスタイル - マテリアル感 */
+    /* ボタンスタイル - WOTA風シンプル */
     .stButton>button {{
-        background: linear-gradient(135deg, rgba(102, 126, 234, 0.95) 0%, rgba(118, 75, 162, 0.95) 100%);
-        color: white;
-        border: none;
-        border-radius: 12px;
-        padding: 0.6rem 2.5rem;
-        font-weight: 700;
-        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-        box-shadow: 0 4px 16px rgba(102, 126, 234, 0.4),
-                    inset 0 1px 0 rgba(255, 255, 255, 0.3);
-        text-transform: uppercase;
-        letter-spacing: 1px;
-        font-size: 14px;
+        background: #1a1a1a;
+        color: #ffffff;
+        border: 1px solid #1a1a1a;
+        border-radius: 4px;
+        padding: 0.75rem 2rem;
+        font-weight: 500;
+        transition: all 0.2s ease;
+        box-shadow: none;
+        text-transform: none;
+        letter-spacing: 0;
+        font-size: 15px;
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     }}
     
     .stButton>button:hover {{
-        transform: translateY(-3px);
-        box-shadow: 0 8px 24px rgba(102, 126, 234, 0.5),
-                    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+        background: #333333;
+        border-color: #333333;
+        transform: none;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
     }}
     
-    /* サイドバー - ガラスモーフィズム */
+    /* サイドバー - WOTA風シンプル */
     [data-testid="stSidebar"] {{
-        background: rgba(255, 255, 255, 0.85);
-        backdrop-filter: blur(20px);
-        border-right: 1px solid rgba(0, 0, 0, 0.1);
+        background: rgba(255, 255, 255, 0.95);
+        backdrop-filter: blur(10px);
+        border-right: 1px solid rgba(0, 0, 0, 0.08);
     }}
     
     [data-testid="stSidebar"] [data-testid="stMarkdownContainer"] {{
-        color: #2c3e50;
+        color: #1a1a1a;
+        font-weight: 400;
     }}
     
-    /* 入力フィールド - マテリアル感 */
+    /* ラジオボタン - シンプルなメニュー */
+    [data-testid="stRadio"] label {{
+        font-size: 15px;
+        font-weight: 400;
+        color: #1a1a1a;
+        padding: 8px 12px;
+        border-radius: 4px;
+        transition: background 0.2s ease;
+    }}
+    
+    [data-testid="stRadio"] label:hover {{
+        background: rgba(0, 0, 0, 0.04);
+    }}
+    
+    [data-testid="stRadio"] input[type="radio"]:checked + label {{
+        background: rgba(0, 0, 0, 0.08);
+        font-weight: 500;
+    }}
+    
+    /* 入力フィールド - WOTA風シンプル */
     .stTextInput>div>div>input,
     .stTextArea>div>div>textarea,
     .stSelectbox>div>div>select {{
-        border-radius: 12px;
-        border: 2px solid rgba(0, 0, 0, 0.1);
-        background: rgba(255, 255, 255, 0.9);
-        backdrop-filter: blur(10px);
-        transition: all 0.3s ease;
-        box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.05);
+        border-radius: 4px;
+        border: 1px solid rgba(0, 0, 0, 0.15);
+        background: #ffffff;
+        transition: all 0.2s ease;
+        box-shadow: none;
+        font-size: 15px;
+        padding: 0.5rem 0.75rem;
     }}
     
     .stTextInput>div>div>input:focus,
     .stTextArea>div>div>textarea:focus,
     .stSelectbox>div>div>select:focus {{
-        border-color: #667eea;
-        box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.15),
-                    inset 0 2px 4px rgba(0, 0, 0, 0.05);
-        background: rgba(255, 255, 255, 1);
+        border-color: #1a1a1a;
+        box-shadow: 0 0 0 2px rgba(26, 26, 26, 0.1);
+        background: #ffffff;
+        outline: none;
     }}
     
-    /* メトリクス */
+    /* メトリクス - WOTA風 */
     [data-testid="stMetricValue"] {{
-        font-size: 2.2rem;
-        font-weight: 900;
-        color: #2c3e50;
+        font-size: 2rem;
+        font-weight: 600;
+        color: #1a1a1a;
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     }}
     
-    /* グラデーションテキスト */
-    .gradient-text {{
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        font-weight: 800;
-        letter-spacing: 1px;
+    [data-testid="stMetricLabel"] {{
+        font-size: 14px;
+        font-weight: 400;
+        color: #666666;
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     }}
+    
+    /* グラデーションテキスト - WOTA風シンプル（削除） */
     
     /* マテリアル装飾要素 */
     .material-texture {{
@@ -395,25 +401,42 @@ def get_custom_css():
         50% {{ transform: translate(20px, 20px) rotate(5deg); }}
     }}
     
-    /* セクションタイトル */
+    /* セクションタイトル - WOTA風 */
     .section-title {{
-        font-size: 2.5rem;
-        font-weight: 800;
-        color: #2c3e50;
-        margin: 40px 0 20px 0;
-        text-align: center;
+        font-size: 2rem;
+        font-weight: 600;
+        color: #1a1a1a;
+        margin: 40px 0 24px 0;
+        text-align: left;
         position: relative;
-        padding-bottom: 20px;
+        padding-bottom: 16px;
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        letter-spacing: -0.01em;
     }}
     
     .section-title::after {{
         content: '';
         display: block;
-        width: 80px;
-        height: 4px;
-        background: linear-gradient(90deg, transparent, #667eea, transparent);
-        margin: 15px auto 0;
-        border-radius: 2px;
+        width: 40px;
+        height: 2px;
+        background: #1a1a1a;
+        margin: 16px 0 0;
+        border-radius: 0;
+    }}
+    
+    /* 見出しの視認性向上 */
+    h1, h2, h3, h4, h5, h6 {{
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
+        font-weight: 600 !important;
+        color: #1a1a1a !important;
+        letter-spacing: -0.01em;
+    }}
+    
+    /* 本文の視認性向上 */
+    p, span, div, li {{
+        font-size: 15px;
+        line-height: 1.6;
+        color: #1a1a1a;
     }}
 </style>
 """
@@ -432,7 +455,7 @@ def ensure_sample_data():
             # サンプルデータを投入
             from init_sample_data import init_sample_data
             init_sample_data()
-            st.info("📦 サンプルデータを自動投入しました。ページをリロードしてください。")
+            st.info("サンプルデータを自動投入しました。ページをリロードしてください。")
     except Exception as e:
         st.error(f"サンプルデータの投入中にエラーが発生しました: {e}")
     finally:
@@ -583,7 +606,7 @@ def main():
     ensure_sample_data()
     
     # デバッグスイッチ（サイドバーでCSSを無効化可能）
-    debug_no_css = st.sidebar.checkbox("🔧 Debug: CSSを無効化", value=False, help="白飛びが発生している場合、このチェックをONにするとCSSを無効化して表示を確認できます")
+    debug_no_css = st.sidebar.checkbox("Debug: CSSを無効化", value=False, help="白飛びが発生している場合、このチェックをONにするとCSSを無効化して表示を確認できます")
     
     # CSS適用（デバッグモードでない場合のみ）
     if not debug_no_css:
@@ -608,23 +631,23 @@ def main():
             }
         </style>
         """, unsafe_allow_html=True)
-        st.warning("🔧 デバッグモード: CSSが無効化されています。表示が正常な場合、CSSが原因です。")
+        st.warning("デバッグモード: CSSが無効化されています。表示が正常な場合、CSSが原因です。")
     
-    # ヘッダー
-    st.markdown('<h1 class="main-header">🔬 マテリアルデータベース</h1>', unsafe_allow_html=True)
-    st.markdown('<p style="text-align: center; color: #555; font-size: 1.3rem; margin-bottom: 3rem; font-weight: 500;">素材の可能性を探索する、美しいデータベース</p>', unsafe_allow_html=True)
+    # ヘッダー - WOTA風シンプル
+    st.markdown('<h1 class="main-header">マテリアルデータベース</h1>', unsafe_allow_html=True)
+    st.markdown('<p style="text-align: center; color: #666; font-size: 1.1rem; margin-bottom: 3rem; font-weight: 400; letter-spacing: 0.01em;">素材の可能性を探索するデータベース</p>', unsafe_allow_html=True)
     
-    # サイドバー
+    # サイドバー - WOTA風シンプル
     with st.sidebar:
         st.markdown("""
-        <div style="text-align: center; padding: 20px 0;">
-            <h2 style="color: #2c3e50; margin: 0; font-weight: 800;">📋 メニュー</h2>
+        <div style="text-align: left; padding: 20px 0 24px 0; border-bottom: 1px solid rgba(0,0,0,0.08);">
+            <h2 style="color: #1a1a1a; margin: 0; font-weight: 600; font-size: 18px; letter-spacing: -0.01em;">メニュー</h2>
         </div>
         """, unsafe_allow_html=True)
         
         page = st.radio(
             "ページを選択",
-            ["🏠 ホーム", "📦 材料一覧", "➕ 材料登録", "📊 ダッシュボード", "🔍 検索", "📄 素材カード"],
+            ["ホーム", "材料一覧", "材料登録", "ダッシュボード", "検索", "素材カード"],
             label_visibility="collapsed"
         )
         
@@ -632,7 +655,7 @@ def main():
         
         # 統計情報
         materials = get_all_materials()
-        st.markdown("### 📈 統計情報")
+        st.markdown("### 統計情報")
         
         col1, col2 = st.columns(2)
         with col1:
@@ -659,17 +682,17 @@ def main():
         """, unsafe_allow_html=True)
     
     # ページルーティング
-    if page == "🏠 ホーム":
+    if page == "ホーム":
         show_home()
-    elif page == "📦 材料一覧":
+    elif page == "材料一覧":
         show_materials_list()
-    elif page == "➕ 材料登録":
+    elif page == "材料登録":
         show_detailed_material_form()
-    elif page == "📊 ダッシュボード":
+    elif page == "ダッシュボード":
         show_dashboard()
-    elif page == "🔍 検索":
+    elif page == "検索":
         show_search()
-    elif page == "📄 素材カード":
+    elif page == "素材カード":
         show_material_cards()
 
 def show_home():
@@ -739,7 +762,7 @@ def show_home():
     with col2:
         st.markdown("""
         <div class="stat-card">
-            <div style="font-size: 3.5rem; margin-bottom: 15px;">📊</div>
+            <div style="font-size: 2rem; margin-bottom: 15px; color: #1a1a1a; font-weight: 600;">ダッシュボード</div>
             <h3 style="color: #2c3e50; margin: 15px 0;">データ可視化</h3>
             <p style="color: #666; margin: 0;">グラフで材料データを分析</p>
         </div>
@@ -796,7 +819,7 @@ def show_home():
     future_features = [
         ("🤖", "自然言語検索", "「高強度で軽量な材料」など、自然な言葉で検索"),
         ("🎯", "材料推奨", "要件に基づいて最適な材料を自動推奨"),
-        ("📊", "物性予測", "AIによる物性データの予測"),
+        ("物性予測", "AIによる物性データの予測"),
         ("🔗", "類似度分析", "材料間の類似性を分析")
     ]
     
@@ -813,7 +836,7 @@ def show_home():
 
 def show_materials_list():
     """材料一覧ページ"""
-    st.markdown('<h2 class="gradient-text section-title">📦 材料一覧</h2>', unsafe_allow_html=True)
+    st.markdown('<h2 class="section-title">材料一覧</h2>', unsafe_allow_html=True)
     
     materials = get_all_materials()
     
@@ -827,7 +850,7 @@ def show_materials_list():
         categories = ["すべて"] + list(set([m.category for m in materials if m.category]))
         selected_category = st.selectbox("カテゴリでフィルタ", categories)
     with col2:
-        search_term = st.text_input("🔍 材料名で検索", placeholder="材料名を入力...")
+        search_term = st.text_input("材料名で検索", placeholder="材料名を入力...")
     with col3:
         st.write("")  # スペーサー
         st.write("")  # スペーサー
@@ -876,7 +899,7 @@ def show_materials_list():
 
 def show_dashboard():
     """ダッシュボードページ"""
-    st.markdown('<h2 class="gradient-text section-title">📊 ダッシュボード</h2>', unsafe_allow_html=True)
+    st.markdown('<h2 class="section-title">ダッシュボード</h2>', unsafe_allow_html=True)
     
     materials = get_all_materials()
     
@@ -885,7 +908,7 @@ def show_dashboard():
         return
     
     # 統計カード
-    st.markdown("### 📈 統計情報")
+    st.markdown("### 統計情報")
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
@@ -942,7 +965,7 @@ def show_dashboard():
             st.plotly_chart(fig, use_container_width=True)
     
     # カテゴリ別詳細
-    st.markdown("### 📋 カテゴリ別詳細")
+    st.markdown("### カテゴリ別詳細")
     category_data = {}
     for material in materials:
         cat = material.category or "未分類"
@@ -966,7 +989,7 @@ def show_dashboard():
 
 def show_search():
     """検索ページ"""
-    st.markdown('<h2 class="gradient-text section-title">🔍 材料検索</h2>', unsafe_allow_html=True)
+    st.markdown('<h2 class="section-title">材料検索</h2>', unsafe_allow_html=True)
     
     search_query = st.text_input("検索キーワード", placeholder="材料名、カテゴリ、説明などで検索...", key="search_input")
     
@@ -1012,7 +1035,7 @@ def show_search():
 
 def show_material_cards():
     """素材カード表示ページ"""
-    st.markdown('<h2 class="gradient-text section-title">📄 素材カード</h2>', unsafe_allow_html=True)
+    st.markdown('<h2 class="section-title">素材カード</h2>', unsafe_allow_html=True)
     
     materials = get_all_materials()
     
