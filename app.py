@@ -16,6 +16,8 @@ from datetime import datetime, timedelta
 from collections import Counter
 
 from database import SessionLocal, Material, Property, Image, MaterialMetadata, ReferenceURL, UseExample, init_db
+from sqlalchemy.orm import selectinload
+from sqlalchemy import select, func
 from card_generator import generate_material_card
 from models import MaterialCard
 from material_form_detailed import show_detailed_material_form
@@ -420,24 +422,59 @@ def get_custom_css():
 if not os.path.exists("materials.db"):
     init_db()
 
+def ensure_sample_data():
+    """サンプルデータが存在しない場合、自動投入"""
+    db = get_db()
+    try:
+        # 材料数をカウント
+        count = db.execute(select(func.count(Material.id))).scalar() or 0
+        if count == 0:
+            # サンプルデータを投入
+            from init_sample_data import init_sample_data
+            init_sample_data()
+            st.info("📦 サンプルデータを自動投入しました。ページをリロードしてください。")
+    except Exception as e:
+        st.error(f"サンプルデータの投入中にエラーが発生しました: {e}")
+    finally:
+        db.close()
+
 def get_db():
     """データベースセッションを取得"""
     return SessionLocal()
 
 def get_all_materials():
-    """全材料を取得"""
+    """全材料を取得（Eager Loadでリレーションも先読み）"""
     db = get_db()
     try:
-        materials = db.query(Material).all()
+        # Eager Loadでproperties, images, metadata_itemsを先読み
+        stmt = (
+            select(Material)
+            .options(
+                selectinload(Material.properties),
+                selectinload(Material.images),
+                selectinload(Material.metadata_items),
+            )
+            .order_by(Material.created_at.desc() if hasattr(Material, 'created_at') else Material.id.desc())
+        )
+        materials = db.execute(stmt).scalars().all()
         return materials
     finally:
         db.close()
 
 def get_material_by_id(material_id: int):
-    """IDで材料を取得"""
+    """IDで材料を取得（Eager Loadでリレーションも先読み）"""
     db = get_db()
     try:
-        material = db.query(Material).filter(Material.id == material_id).first()
+        stmt = (
+            select(Material)
+            .options(
+                selectinload(Material.properties),
+                selectinload(Material.images),
+                selectinload(Material.metadata_items),
+            )
+            .filter(Material.id == material_id)
+        )
+        material = db.execute(stmt).scalar_one_or_none()
         return material
     finally:
         db.close()
@@ -542,6 +579,9 @@ def create_timeline_chart(materials):
 
 # メインアプリケーション
 def main():
+    # サンプルデータの自動投入（初回起動時のみ）
+    ensure_sample_data()
+    
     # デバッグスイッチ（サイドバーでCSSを無効化可能）
     debug_no_css = st.sidebar.checkbox("🔧 Debug: CSSを無効化", value=False, help="白飛びが発生している場合、このチェックをONにするとCSSを無効化して表示を確認できます")
     
@@ -603,7 +643,12 @@ def main():
                 st.metric("カテゴリ", categories)
         
         if materials:
-            total_properties = sum(len(m.properties) for m in materials)
+            # SQLで直接カウント（DetachedInstanceError回避）
+            db = get_db()
+            try:
+                total_properties = db.execute(select(func.count(Property.id))).scalar() or 0
+            finally:
+                db.close()
             st.metric("物性データ", total_properties)
         
         st.markdown("---")
@@ -861,7 +906,12 @@ def show_dashboard():
         """, unsafe_allow_html=True)
     
     with col3:
-        total_properties = sum(len(m.properties) for m in materials)
+        # SQLで直接カウント（DetachedInstanceError回避）
+        db = get_db()
+        try:
+            total_properties = db.execute(select(func.count(Property.id))).scalar() or 0
+        finally:
+            db.close()
         st.markdown(f"""
         <div class="stat-card">
             <div class="stat-value">{total_properties}</div>
@@ -903,7 +953,16 @@ def show_dashboard():
     for category, mats in category_data.items():
         with st.expander(f"📁 {category} ({len(mats)}件)", expanded=False):
             for mat in mats:
-                st.write(f"• **{mat.name}** - {len(mat.properties)}個の物性データ")
+                # SQLで直接カウント（DetachedInstanceError回避）
+                db = get_db()
+                try:
+                    prop_count = db.execute(
+                        select(func.count(Property.id))
+                        .where(Property.material_id == mat.id)
+                    ).scalar() or 0
+                finally:
+                    db.close()
+                st.write(f"• **{mat.name}** - {prop_count}個の物性データ")
 
 def show_search():
     """検索ページ"""
@@ -929,12 +988,23 @@ def show_search():
             for idx, material in enumerate(results):
                 with cols[idx % 2]:
                     with st.container():
+                        # SQLで直接カウント（DetachedInstanceError回避）
+                        db = get_db()
+                        try:
+                            prop_count = db.execute(
+                                select(func.count(Property.id))
+                                .where(Property.material_id == material.id)
+                            ).scalar() or 0
+                        finally:
+                            db.close()
+                        
+                        prop_text = f'<p style="color: #555;"><strong>物性データ:</strong> {prop_count}個</p>' if prop_count > 0 else ''
                         st.markdown(f"""
                         <div class="material-card-container material-texture">
                             <h3 style="color: #667eea; margin-top: 0; font-size: 1.3rem; font-weight: 700;">{material.name}</h3>
                             <span class="category-badge">{material.category or '未分類'}</span>
                             <p style="color: #666; margin: 15px 0; line-height: 1.6;">{material.description or '説明なし'}</p>
-                            {f'<p style="color: #555;"><strong>物性データ:</strong> {len(material.properties)}個</p>' if material.properties else ''}
+                            {prop_text}
                         </div>
                         """, unsafe_allow_html=True)
         else:
