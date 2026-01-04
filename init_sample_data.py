@@ -206,6 +206,33 @@ def init_sample_data():
         db.add(Property(material_id=material4.id, property_name="JIS規格", value=None, unit="JIS H 4000"))
         
         ensure_material_image("アルミニウム", "金属・合金", material4.id, db)
+        
+        # 用途例を追加（画像付き）
+        from utils.use_example_image_generator import ensure_use_example_image
+        use1_img = ensure_use_example_image("アルミニウム", "アルミ鍋", "キッチン")
+        use2_img = ensure_use_example_image("アルミニウム", "アルミサッシ", "建築")
+        
+        db.add(UseExample(
+            material_id=material4.id,
+            example_name="アルミ鍋",
+            domain="キッチン",
+            description="調理器具として広く使用される。熱伝導性が良く、軽量。",
+            image_path=use1_img or "",
+            source_name="Generated",
+            source_url="",
+            license_note="自前生成"
+        ))
+        db.add(UseExample(
+            material_id=material4.id,
+            example_name="アルミサッシ/外装材",
+            domain="建築",
+            description="建築外装材として使用。軽量で耐候性に優れる。",
+            image_path=use2_img or "",
+            source_name="Generated",
+            source_url="",
+            license_note="自前生成"
+        ))
+        
         materials_data.append(material4)
         print(f"    ✓ アルミニウム（純アルミ） (ID: {material4.id})")
         
@@ -255,6 +282,22 @@ def init_sample_data():
         db.add(Property(material_id=material5.id, property_name="主成分", value=None, unit="Fe, Cr 18%, Ni 8%"))
         
         ensure_material_image("ステンレス鋼", "金属・合金", material5.id, db)
+        
+        # 用途例を追加（画像付き）
+        from utils.use_example_image_generator import ensure_use_example_image
+        use1_img = ensure_use_example_image("ステンレス鋼", "調理台/流し台", "キッチン")
+        
+        db.add(UseExample(
+            material_id=material5.id,
+            example_name="調理台/流し台",
+            domain="キッチン",
+            description="キッチン設備として使用。耐食性と清潔性に優れる。",
+            image_path=use1_img or "",
+            source_name="Generated",
+            source_url="",
+            license_note="自前生成"
+        ))
+        
         materials_data.append(material5)
         print(f"    ✓ ステンレス鋼 SUS304 (ID: {material5.id})")
         
@@ -304,6 +347,22 @@ def init_sample_data():
         db.add(Property(material_id=material6.id, property_name="主成分", value=None, unit="Cu 70%, Zn 30%"))
         
         ensure_material_image("真鍮", "金属・合金", material6.id, db)
+        
+        # 用途例を追加（画像付き）
+        from utils.use_example_image_generator import ensure_use_example_image
+        use1_img = ensure_use_example_image("真鍮", "ドアノブ/金物", "内装")
+        
+        db.add(UseExample(
+            material_id=material6.id,
+            example_name="ドアノブ/金物",
+            domain="内装",
+            description="内装金物として使用。美しい黄金色と優れた加工性。",
+            image_path=use1_img or "",
+            source_name="Generated",
+            source_url="",
+            license_note="自前生成"
+        ))
+        
         materials_data.append(material6)
         print(f"    ✓ 真鍮（黄銅） (ID: {material6.id})")
         
@@ -355,6 +414,33 @@ def init_sample_data():
         db.add(Property(material_id=material7.id, property_name="JIS規格", value=None, unit="JIS K 6922"))
         
         ensure_material_image("ポリプロピレン", "高分子（樹脂・エラストマー等）", material7.id, db)
+        
+        # 用途例を追加（画像付き）
+        from utils.use_example_image_generator import ensure_use_example_image
+        use1_img = ensure_use_example_image("ポリプロピレン", "収納ケース", "生活")
+        use2_img = ensure_use_example_image("ポリプロピレン", "配管", "建築")
+        
+        db.add(UseExample(
+            material_id=material7.id,
+            example_name="収納ケース",
+            domain="生活",
+            description="生活用品として使用。軽量で耐薬品性に優れる。",
+            image_path=use1_img or "",
+            source_name="Generated",
+            source_url="",
+            license_note="自前生成"
+        ))
+        db.add(UseExample(
+            material_id=material7.id,
+            example_name="配管",
+            domain="建築",
+            description="建築配管材として使用。耐薬品性と軽量性。",
+            image_path=use2_img or "",
+            source_name="Generated",
+            source_url="",
+            license_note="自前生成"
+        ))
+        
         materials_data.append(material7)
         print(f"    ✓ ポリプロピレン（PP） (ID: {material7.id})")
         
@@ -403,6 +489,22 @@ def init_sample_data():
         db.add(Property(material_id=material8.id, property_name="JIS規格", value=None, unit="JIS K 6760"))
         
         ensure_material_image("ポリエチレン", "高分子（樹脂・エラストマー等）", material8.id, db)
+        
+        # 用途例を追加（画像付き）
+        from utils.use_example_image_generator import ensure_use_example_image
+        use1_img = ensure_use_example_image("ポリエチレン", "シート/包装材", "生活")
+        
+        db.add(UseExample(
+            material_id=material8.id,
+            example_name="シート/包装材",
+            domain="生活",
+            description="包装材として広く使用される。柔軟性と化学的安定性。",
+            image_path=use1_img or "",
+            source_name="Generated",
+            source_url="",
+            license_note="自前生成"
+        ))
+        
         materials_data.append(material8)
         print(f"    ✓ ポリエチレン（PE） (ID: {material8.id})")
         
@@ -451,6 +553,22 @@ def init_sample_data():
         db.add(Property(material_id=material9.id, property_name="JIS規格", value=None, unit="JIS K 6723"))
         
         ensure_material_image("ポリ塩化ビニル", "高分子（樹脂・エラストマー等）", material9.id, db)
+        
+        # 用途例を追加（画像付き）
+        from utils.use_example_image_generator import ensure_use_example_image
+        use1_img = ensure_use_example_image("ポリ塩化ビニル", "シート/内装材", "建築")
+        
+        db.add(UseExample(
+            material_id=material9.id,
+            example_name="シート/内装材",
+            domain="建築",
+            description="建築内装材として使用。耐候性と加工性に優れる。",
+            image_path=use1_img or "",
+            source_name="Generated",
+            source_url="",
+            license_note="自前生成"
+        ))
+        
         materials_data.append(material9)
         print(f"    ✓ ポリ塩化ビニル（PVC） (ID: {material9.id})")
         

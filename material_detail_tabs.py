@@ -252,38 +252,82 @@ def show_procurement_uses_tab(material):
                     ">{cat}</div>
                     """, unsafe_allow_html=True)
     
-    # 用途例（UseExample）- DetachedInstanceError対策
+    # 代表的な使用例（UseExample）- 画像付き表示
+    st.markdown("---")
+    st.markdown("### 代表的な使用例")
+    
     try:
         # eager load済みのuse_examplesにアクセス
+        use_examples_list = []
         if hasattr(material, 'use_examples') and material.use_examples:
-            st.markdown("#### 用途例")
-            for use_ex in material.use_examples:
-                st.markdown(f"- **{use_ex.example_name or '用途例'}**")
-                if use_ex.description:
-                    st.markdown(f"  {use_ex.description}")
-                if use_ex.url:
-                    st.markdown(f"  [詳細リンク]({use_ex.url})")
+            use_examples_list = material.use_examples
         else:
             # データベースから直接取得を試みる（フォールバック）
             from database import SessionLocal, UseExample
             db = SessionLocal()
             try:
-                use_examples = db.query(UseExample).filter(UseExample.material_id == material.id).all()
-                if use_examples:
-                    st.markdown("#### 用途例")
-                    for use_ex in use_examples:
-                        st.markdown(f"- **{use_ex.example_name or '用途例'}**")
-                        if use_ex.description:
-                            st.markdown(f"  {use_ex.description}")
-                        if use_ex.url:
-                            st.markdown(f"  [詳細リンク]({use_ex.url})")
+                use_examples_list = db.query(UseExample).filter(UseExample.material_id == material.id).all()
             finally:
                 db.close()
+        
+        if use_examples_list:
+            # domainごとにグループ化（オプション）
+            from collections import defaultdict
+            by_domain = defaultdict(list)
+            for use_ex in use_examples_list:
+                domain = getattr(use_ex, 'domain', None) or "その他"
+                by_domain[domain].append(use_ex)
+            
+            # 各用途例を表示（画像付き）
+            from utils.use_example_display import display_use_example_image
+            
+            for domain, examples in by_domain.items():
+                if len(by_domain) > 1:
+                    st.markdown(f"#### {domain}")
+                
+                # 用途例をグリッド表示（画像 + 情報）
+                cols = st.columns(min(3, len(examples)))
+                for idx, use_ex in enumerate(examples):
+                    with cols[idx % 3]:
+                        # 画像を表示
+                        display_use_example_image(use_ex, width=280, use_container_width=False)
+                        
+                        # タイトル
+                        st.markdown(f"**{use_ex.example_name or '用途例'}**")
+                        
+                        # 説明
+                        if use_ex.description:
+                            st.markdown(f"<p style='font-size: 0.85rem; color: #666; margin-top: 4px;'>{use_ex.description}</p>", unsafe_allow_html=True)
+                        
+                        # 出典情報（権利的に安全な表示）
+                        source_name = getattr(use_ex, 'source_name', None)
+                        source_url = getattr(use_ex, 'source_url', None)
+                        license_note = getattr(use_ex, 'license_note', None)
+                        
+                        if source_name or source_url or license_note:
+                            source_parts = []
+                            if source_name:
+                                if source_url:
+                                    source_parts.append(f"[{source_name}]({source_url})")
+                                else:
+                                    source_parts.append(source_name)
+                            if license_note:
+                                source_parts.append(f"({license_note})")
+                            
+                            if source_parts:
+                                st.markdown(f"<small style='color: #999;'>**出典**: {' '.join(source_parts)}</small>", unsafe_allow_html=True)
+                        
+                        # リンク（後方互換）
+                        if use_ex.example_url:
+                            st.markdown(f"<small>[詳細リンク]({use_ex.example_url})</small>", unsafe_allow_html=True)
+        else:
+            st.info("用途例が未登録です。")
     except Exception as e:
         # DetachedInstanceError等の例外をキャッチ（アプリを落とさない）
         import traceback
         print(f"用途例取得エラー: {e}")
         traceback.print_exc()
+        st.warning("用途例の取得に失敗しました。")
     
     # 用途イメージ画像（画像表示の1本化）
     st.markdown("---")
@@ -349,20 +393,24 @@ def show_history_story_tab(material):
             for motive in motives:
                 st.markdown(f"- {motive}")
     
-    if material.development_motive_other:
-        st.markdown(f"**その他動機**: {material.development_motive_other}")
+    # その他動機（安全にアクセス）
+    development_motive_other = getattr(material, 'development_motive_other', None)
+    if development_motive_other:
+        st.markdown(f"**その他動機**: {development_motive_other}")
     
-    # 開発背景（短文）
-    if material.development_background_short:
+    # 開発背景（短文）（安全にアクセス）
+    development_background_short = getattr(material, 'development_background_short', None)
+    if development_background_short:
         st.markdown("---")
         st.markdown("#### 開発背景")
-        st.markdown(material.development_background_short)
+        st.markdown(development_background_short)
     
-    # 開発ストーリー（長文）
-    if material.development_story:
+    # 開発ストーリー（長文）（安全にアクセス）
+    development_story = getattr(material, 'development_story', None)
+    if development_story:
         st.markdown("---")
         st.markdown("#### 開発ストーリー")
-        st.markdown(material.development_story)
+        st.markdown(development_story)
     
     st.markdown("---")
     
@@ -379,8 +427,10 @@ def show_history_story_tab(material):
                 st.markdown("#### 触感")
                 for tag in tactile:
                     st.markdown(f"- {tag}")
-        if material.tactile_other:
-            st.markdown(f"**その他触感**: {material.tactile_other}")
+        # その他触感（安全にアクセス）
+        tactile_other = getattr(material, 'tactile_other', None)
+        if tactile_other:
+            st.markdown(f"**その他触感**: {tactile_other}")
         
         # 視覚
         if material.visual_tags:
@@ -389,24 +439,29 @@ def show_history_story_tab(material):
                 st.markdown("#### 視覚的特徴")
                 for tag in visual:
                     st.markdown(f"- {tag}")
-        if material.visual_other:
-            st.markdown(f"**その他視覚**: {material.visual_other}")
+        # その他視覚（安全にアクセス）
+        visual_other = getattr(material, 'visual_other', None)
+        if visual_other:
+            st.markdown(f"**その他視覚**: {visual_other}")
     
     with col2:
-        # 音・匂い
-        if material.sound_smell:
+        # 音・匂い（安全にアクセス）
+        sound_smell = getattr(material, 'sound_smell', None)
+        if sound_smell:
             st.markdown("#### 音・匂い")
-            st.markdown(material.sound_smell)
+            st.markdown(sound_smell)
         
         # 経年変化（データベースに該当フィールドがない場合はスキップ）
-        if hasattr(material, 'aging_characteristics') and material.aging_characteristics:
+        aging_characteristics = getattr(material, 'aging_characteristics', None)
+        if aging_characteristics:
             st.markdown("#### 経年変化")
-            st.markdown(material.aging_characteristics)
+            st.markdown(aging_characteristics)
         
-        # 加工性（processing_knowhowフィールドを使用）
-        if material.processing_knowhow:
+        # 加工性（processing_knowhowフィールドを使用）（安全にアクセス）
+        processing_knowhow = getattr(material, 'processing_knowhow', None)
+        if processing_knowhow:
             st.markdown("#### 加工性・加工ノウハウ")
-            st.markdown(material.processing_knowhow)
+            st.markdown(processing_knowhow)
     
     # 関連材料
     if material.related_materials:
@@ -418,15 +473,19 @@ def show_history_story_tab(material):
                 st.markdown(f"- {rel}")
     
     # NG用途（使われなかった可能性）
-    if material.ng_uses:
+    # NG用途（安全にアクセス）
+    ng_uses = getattr(material, 'ng_uses', None)
+    if ng_uses:
         st.markdown("---")
         st.markdown("### 使われなかった可能性")
-        ng_uses = parse_json_field(material.ng_uses)
-        if ng_uses:
+        ng_uses_list = parse_json_field(ng_uses)
+        if ng_uses_list:
             st.markdown("#### NG用途")
-            for ng in ng_uses:
+            for ng in ng_uses_list:
                 st.markdown(f"- {ng}")
     
-    if material.ng_uses_other:
-        st.markdown(f"**その他NG用途**: {material.ng_uses_other}")
+    # その他NG用途（安全にアクセス）
+    ng_uses_other = getattr(material, 'ng_uses_other', None)
+    if ng_uses_other:
+        st.markdown(f"**その他NG用途**: {ng_uses_other}")
 

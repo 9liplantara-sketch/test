@@ -192,14 +192,19 @@ class ReferenceURL(Base):
 
 
 class UseExample(Base):
-    """代表的使用例テーブル"""
+    """代表的使用例テーブル（用途写真対応）"""
     __tablename__ = "use_examples"
 
     id = Column(Integer, primary_key=True, index=True)
     material_id = Column(Integer, ForeignKey("materials.id"), nullable=False)
-    example_name = Column(String(255), nullable=False)  # 製品名/事例名
-    example_url = Column(String(500))  # リンク
-    description = Column(Text)
+    example_name = Column(String(255), nullable=False)  # 製品名/事例名（タイトル）
+    domain = Column(String(100))  # 領域（内装/プロダクト/建築/キッチン等）
+    description = Column(Text)  # 短い説明
+    image_path = Column(String(500))  # 画像パス（相対パス）
+    source_name = Column(String(255))  # 出典名（例: "Generated", "PhotoAC"）
+    source_url = Column(String(500))  # 出典URL
+    license_note = Column(Text)  # ライセンス表記
+    example_url = Column(String(500))  # リンク（後方互換のため残す）
 
     # リレーション
     material = relationship("Material", back_populates="use_examples")
