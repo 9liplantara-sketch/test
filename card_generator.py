@@ -36,12 +36,19 @@ def get_base64_image(image_path):
 
 def generate_material_card(card_data: MaterialCard) -> str:
     """素材カードのHTMLを生成（マテリアル感のあるリッチなデザイン）"""
-    material = card_data.material
-    primary_image = card_data.primary_image
+    payload = card_data.payload
+    material_id = payload.id
+    material_name = payload.name_official or payload.name
+    material_category = payload.category_main or payload.category
+    material_description = payload.description
+    properties = payload.properties
+    primary_image_path = payload.primary_image_path
+    primary_image_type = payload.primary_image_type
+    primary_image_description = payload.primary_image_description
     
     # QRコード生成
     qr = qrcode.QRCode(version=1, box_size=10, border=5)
-    qr.add_data(f"Material ID: {material.id}")
+    qr.add_data(f"Material ID: {material_id}")
     qr.make(fit=True)
     qr_img = qr.make_image(fill_color="black", back_color="white")
     
@@ -57,13 +64,13 @@ def generate_material_card(card_data: MaterialCard) -> str:
     
     # 画像パスの処理
     image_url = ""
-    if primary_image:
+    if primary_image_path:
         # ファイルパスから相対パスを生成
-        file_name = primary_image.file_path.split('/')[-1] if '/' in primary_image.file_path else primary_image.file_path.split('\\')[-1]
+        file_name = primary_image_path.split('/')[-1] if '/' in primary_image_path else primary_image_path.split('\\')[-1]
         image_url = f"/uploads/{file_name}"
     
     # 主要物性データの取得
-    main_properties = material.properties[:8] if material.properties else []
+    main_properties = properties[:8] if properties else []
     
     # カテゴリに応じたカラー
     category_colors = {
@@ -73,7 +80,7 @@ def generate_material_card(card_data: MaterialCard) -> str:
         "複合材料": "#F38181",
         "その他": "#667eea"
     }
-    primary_color = category_colors.get(material.category, "#667eea")
+    primary_color = category_colors.get(material_category, "#667eea")
     secondary_color = "#764ba2"
     
     html = f"""
@@ -81,7 +88,7 @@ def generate_material_card(card_data: MaterialCard) -> str:
     <html>
     <head>
         <meta charset="utf-8">
-        <title>素材カード - {material.name}</title>
+        <title>素材カード - {material_name}</title>
         <style>
             @media print {{
                 @page {{
@@ -344,14 +351,14 @@ def generate_material_card(card_data: MaterialCard) -> str:
         <div class="card-container">
             <div class="card-header">
                 <div class="decorative-element"></div>
-                <h1 class="material-name">{material.name}</h1>
-                {f'<span class="category-badge">{material.category}</span>' if material.category else ''}
+                <h1 class="material-name">{material_name}</h1>
+                {f'<span class="category-badge">{material_category}</span>' if material_category else ''}
             </div>
             
             <div class="card-body">
                 <div class="image-section">
-                    {f'<img src="{image_url}" alt="{material.name}" class="material-image" onerror="this.style.display=\'none\'; this.nextElementSibling.style.display=\'block\';">' if primary_image else ''}
-                    {f'<div class="no-image" style="display:none;">📷 画像なし</div>' if primary_image else '<div class="no-image">📷 画像なし</div>'}
+                    {f'<img src="{image_url}" alt="{material_name}" class="material-image" onerror="this.style.display=\'none\'; this.nextElementSibling.style.display=\'block\';">' if primary_image_path else ''}
+                    {f'<div class="no-image" style="display:none;">📷 画像なし</div>' if primary_image_path else '<div class="no-image">📷 画像なし</div>'}
                 </div>
                 
                 <div class="properties-section">
@@ -368,15 +375,14 @@ def generate_material_card(card_data: MaterialCard) -> str:
             {f'''
             <div class="description-section">
                 <h3>📝 説明</h3>
-                <p>{material.description or '説明が登録されていません'}</p>
+                <p>{material_description or '説明が登録されていません'}</p>
             </div>
-            ''' if material.description else ''}
+            ''' if material_description else ''}
             
             <div class="card-footer">
                 <div class="metadata">
-                    <p><span class="material-id">ID: {material.id}</span></p>
-                    <p class="date-info">登録日: {material.created_at.strftime('%Y年%m月%d日') if material.created_at else 'N/A'}</p>
-                    {f'<p class="date-info">更新日: {material.updated_at.strftime("%Y年%m月%d日") if material.updated_at else "N/A"}</p>' if material.updated_at else ''}
+                    <p><span class="material-id">ID: {material_id}</span></p>
+                    <p class="date-info">登録日: N/A</p>
                 </div>
                 <div class="qr-code">
                     <img src="data:image/png;base64,{qr_base64}" alt="QR Code">

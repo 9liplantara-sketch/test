@@ -25,6 +25,20 @@ from material_form_detailed import show_detailed_material_form
 from periodic_table_ui import show_periodic_table
 from material_detail_tabs import show_material_detail_tabs
 
+# Git SHA取得関数（ビルド情報表示用）
+import subprocess
+
+def get_git_sha() -> str:
+    """Gitの短縮SHAを取得（失敗時は'no-git'を返す）"""
+    try:
+        sha = subprocess.check_output(
+            ["git", "rev-parse", "--short", "HEAD"],
+            stderr=subprocess.DEVNULL
+        ).decode("utf-8").strip()
+        return sha
+    except (subprocess.CalledProcessError, FileNotFoundError, Exception):
+        return "no-git"
+
 # クラウド環境でのポート設定
 if 'PORT' in os.environ:
     port = int(os.environ.get("PORT", 8501))
@@ -293,13 +307,17 @@ def get_custom_css():
         font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     }}
     
-    /* ボタンスタイル - WOTA風シンプル（コントラスト確保） */
+    /* ボタンスタイル - WOTA風シンプル（コントラスト確保・白文字強制） */
     .stButton>button,
     button[data-baseweb="button"],
-    [data-testid="baseButton-secondary"] {{
-        background: var(--primary) !important;
-        color: var(--on-primary) !important;
-        border: 1px solid var(--primary) !important;
+    [data-testid="baseButton-secondary"],
+    [data-testid="baseButton-primary"],
+    [data-testid="baseButton-secondary"] button,
+    [data-testid="baseButton-primary"] button,
+    button[type="button"] {{
+        background: #1a1a1a !important;
+        color: #ffffff !important;
+        border: 1px solid #1a1a1a !important;
         border-radius: 4px;
         padding: 0.75rem 2rem;
         font-weight: 500;
@@ -311,13 +329,32 @@ def get_custom_css():
         font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     }}
     
+    .stButton>button *,
+    button[data-baseweb="button"] *,
+    [data-testid="baseButton-secondary"] *,
+    [data-testid="baseButton-primary"] *,
+    button[type="button"] *,
+    .stButton>button span,
+    button[data-baseweb="button"] span {{
+        color: #ffffff !important;
+    }}
+    
     .stButton>button:hover,
-    button[data-baseweb="button"]:hover {{
+    button[data-baseweb="button"]:hover,
+    [data-testid="baseButton-secondary"]:hover button,
+    [data-testid="baseButton-primary"]:hover button,
+    button[type="button"]:hover {{
         background: #333333 !important;
         border-color: #333333 !important;
-        color: var(--on-primary) !important;
+        color: #ffffff !important;
         transform: none;
         box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    }}
+    
+    .stButton>button:hover *,
+    button[data-baseweb="button"]:hover *,
+    button[type="button"]:hover * {{
+        color: #ffffff !important;
     }}
     
     /* 黒背景のヘッダー/バー部分の文字色を白に統一 */
@@ -327,12 +364,61 @@ def get_custom_css():
     [style*="background-color:#1a1a1a"],
     .black-bar,
     .dark-header {{
-        color: var(--on-primary) !important;
+        color: #ffffff !important;
     }}
     
     .black-bar *,
     .dark-header * {{
-        color: var(--on-primary) !important;
+        color: #ffffff !important;
+    }}
+    
+    /* Streamlitのヘッダーバーの文字色を白に */
+    [data-testid="stHeader"],
+    header[data-testid="stHeader"],
+    [data-testid="stHeader"] *,
+    header[data-testid="stHeader"] *,
+    [data-testid="stHeader"] p,
+    [data-testid="stHeader"] span,
+    [data-testid="stHeader"] div,
+    [data-testid="stHeader"] a {{
+        color: #ffffff !important;
+    }}
+    
+    /* Streamlitのメニューボタン（ハンバーガーメニュー）の色 */
+    [data-testid="stHeader"] button,
+    [data-testid="stHeader"] button *,
+    header[data-testid="stHeader"] button,
+    header[data-testid="stHeader"] button * {{
+        color: #ffffff !important;
+        fill: #ffffff !important;
+        stroke: #ffffff !important;
+    }}
+    
+    /* Streamlitのツールバー（右上のメニュー） */
+    [data-testid="stToolbar"],
+    [data-testid="stToolbar"] *,
+    [data-testid="stToolbar"] button,
+    [data-testid="stToolbar"] button * {{
+        color: #ffffff !important;
+    }}
+    
+    /* 黒背景の任意の要素 */
+    div[style*="background: #1a1a1a"],
+    div[style*="background:#1a1a1a"],
+    div[style*="background-color: #1a1a1a"],
+    div[style*="background-color:#1a1a1a"],
+    section[style*="background: #1a1a1a"],
+    section[style*="background:#1a1a1a"] {{
+        color: #ffffff !important;
+    }}
+    
+    div[style*="background: #1a1a1a"] *,
+    div[style*="background:#1a1a1a"] *,
+    div[style*="background-color: #1a1a1a"] *,
+    div[style*="background-color:#1a1a1a"] *,
+    section[style*="background: #1a1a1a"] *,
+    section[style*="background:#1a1a1a"] * {{
+        color: #ffffff !important;
     }}
     
     /* サイドバー - WOTA風シンプル */
@@ -683,6 +769,13 @@ def create_timeline_chart(materials):
 
 # メインアプリケーション
 def main():
+    # ビルド情報をサイドバーに表示
+    sha = get_git_sha()
+    current_time = datetime.now().isoformat(timespec="seconds")
+    with st.sidebar:
+        st.caption(f"build: {sha}")
+        st.caption(f"time: {current_time}")
+    
     # サンプルデータの自動投入（初回起動時のみ）
     ensure_sample_data()
     
@@ -725,6 +818,17 @@ def main():
     st.markdown('<h1 class="main-header">マテリアルデータベース</h1>', unsafe_allow_html=True)
     st.markdown('<p style="text-align: left; color: #666; font-size: 0.95rem; margin-bottom: 3rem; font-weight: 400; letter-spacing: 0.01em;">素材の可能性を探索するデータベース</p>', unsafe_allow_html=True)
     
+    # ページ状態の初期化
+    if 'page' not in st.session_state:
+        st.session_state.page = "ホーム"
+    if 'selected_material_id' not in st.session_state:
+        st.session_state.selected_material_id = None
+    
+    # 詳細ページへの遷移がリクエストされた場合
+    if st.session_state.selected_material_id and st.session_state.page != "detail":
+        # 詳細ページに遷移する場合は、ページを"材料一覧"に設定（詳細表示モード）
+        st.session_state.page = "材料一覧"
+    
     # サイドバー - WOTA風シンプル
     with st.sidebar:
         st.markdown("""
@@ -733,11 +837,19 @@ def main():
         </div>
         """, unsafe_allow_html=True)
         
-        page = st.radio(
-            "ページを選択",
-            ["ホーム", "材料一覧", "材料登録", "ダッシュボード", "検索", "素材カード", "元素周期表"],
-            label_visibility="collapsed"
-        )
+        # ページ選択（詳細ページ表示中は選択を変更しない）
+        if st.session_state.selected_material_id:
+            # 詳細ページ表示中は、ページ選択を一時的に無効化
+            st.session_state.page = "材料一覧"
+            page = "材料一覧"
+        else:
+            page = st.radio(
+                "ページを選択",
+                ["ホーム", "材料一覧", "材料登録", "ダッシュボード", "検索", "素材カード", "元素周期表"],
+                index=["ホーム", "材料一覧", "材料登録", "ダッシュボード", "検索", "素材カード", "元素周期表"].index(st.session_state.page) if st.session_state.page in ["ホーム", "材料一覧", "材料登録", "ダッシュボード", "検索", "素材カード", "元素周期表"] else 0,
+                label_visibility="collapsed"
+            )
+            st.session_state.page = page
         
         st.markdown("---")
         
@@ -984,14 +1096,14 @@ def show_materials_list():
     st.markdown('<h2 class="section-title">材料一覧</h2>', unsafe_allow_html=True)
     
     # 詳細表示モードのチェック
-    if 'selected_material_id' in st.session_state and st.session_state['selected_material_id']:
-        material_id = st.session_state['selected_material_id']
+    if st.session_state.selected_material_id:
+        material_id = st.session_state.selected_material_id
         material = get_material_by_id(material_id)
         
         if material:
             # 戻るボタン
             if st.button("← 一覧に戻る", key="back_to_list"):
-                st.session_state['selected_material_id'] = None
+                st.session_state.selected_material_id = None
                 st.rerun()
             
             st.markdown("---")
@@ -1005,7 +1117,7 @@ def show_materials_list():
             return
         else:
             st.error("材料が見つかりませんでした。")
-            st.session_state['selected_material_id'] = None
+            st.session_state.selected_material_id = None
     
     materials = get_all_materials()
     
@@ -1095,8 +1207,31 @@ def show_materials_list():
                 </div>
                 """, unsafe_allow_html=True)
                 
-                if st.button(f"詳細を見る", key=f"detail_{material.id}", use_container_width=True):
-                    st.session_state['selected_material_id'] = material.id
+                # ボタンのスタイルを明示的に設定（白文字を確実に表示）
+                button_key = f"detail_{material.id}"
+                st.markdown(f"""
+                <style>
+                    button[key="{button_key}"],
+                    button[data-testid*="{button_key}"] {{
+                        background-color: #1a1a1a !important;
+                        color: #ffffff !important;
+                        border: 1px solid #1a1a1a !important;
+                    }}
+                    button[key="{button_key}"]:hover,
+                    button[data-testid*="{button_key}"]:hover {{
+                        background-color: #333333 !important;
+                        color: #ffffff !important;
+                    }}
+                    button[key="{button_key}"] *,
+                    button[data-testid*="{button_key}"] * {{
+                        color: #ffffff !important;
+                    }}
+                </style>
+                """, unsafe_allow_html=True)
+                
+                if st.button(f"詳細を見る", key=button_key, use_container_width=True):
+                    st.session_state.selected_material_id = material.id
+                    st.session_state.page = "材料一覧"  # 一覧ページの詳細表示モード
                     st.rerun()
 
 def show_dashboard():
@@ -1263,6 +1398,33 @@ def show_search():
                             {prop_text}
                         </div>
                         """, unsafe_allow_html=True)
+                        
+                        # 詳細を見るボタン（白文字を確実に表示）
+                        button_key = f"search_detail_{material.id}"
+                        st.markdown(f"""
+                        <style>
+                            button[key="{button_key}"],
+                            button[data-testid*="{button_key}"] {{
+                                background-color: #1a1a1a !important;
+                                color: #ffffff !important;
+                                border: 1px solid #1a1a1a !important;
+                            }}
+                            button[key="{button_key}"]:hover,
+                            button[data-testid*="{button_key}"]:hover {{
+                                background-color: #333333 !important;
+                                color: #ffffff !important;
+                            }}
+                            button[key="{button_key}"] *,
+                            button[data-testid*="{button_key}"] * {{
+                                color: #ffffff !important;
+                            }}
+                        </style>
+                        """, unsafe_allow_html=True)
+                        
+                        if st.button(f"詳細を見る", key=button_key, use_container_width=True):
+                            st.session_state.selected_material_id = material.id
+                            st.session_state.page = "材料一覧"  # 一覧ページの詳細表示モードに遷移
+                            st.rerun()
         else:
             st.info("検索結果が見つかりませんでした。別のキーワードで検索してみてください。")
 
@@ -1310,9 +1472,128 @@ def show_material_cards():
         st.markdown("---")
         st.markdown("### 素材カード（印刷用）")
         
-        primary_image = material.images[0] if material.images else None
-        card_data = MaterialCard(material=material, primary_image=primary_image)
-        card_html = generate_material_card(card_data)
+        # MaterialCard用のDTOを作成（ValidationErrorを防ぐ）
+        from models import MaterialCardPayload, MaterialCard, PropertyDTO
+        
+        card_html = None
+        error_message = None
+        
+        try:
+            # 主要画像を取得（安全に）
+            primary_image = None
+            primary_image_path = None
+            primary_image_type = None
+            primary_image_description = None
+            
+            try:
+                if hasattr(material, 'images') and material.images and len(material.images) > 0:
+                    primary_image = material.images[0]
+                    primary_image_path = getattr(primary_image, 'file_path', None) if primary_image else None
+                    primary_image_type = getattr(primary_image, 'image_type', None) if primary_image else None
+                    primary_image_description = getattr(primary_image, 'description', None) if primary_image else None
+            except Exception as img_e:
+                print(f"画像取得エラー（続行）: {img_e}")
+            
+            # 物性データをDTOに変換（安全に）
+            properties_dto = []
+            try:
+                if hasattr(material, 'properties') and material.properties:
+                    for prop in material.properties:
+                        try:
+                            prop_name = getattr(prop, 'property_name', None) or "不明"
+                            prop_value = getattr(prop, 'value', None)
+                            prop_unit = getattr(prop, 'unit', None)
+                            prop_condition = getattr(prop, 'measurement_condition', None)
+                            
+                            prop_dto = PropertyDTO(
+                                property_name=str(prop_name),
+                                value=float(prop_value) if prop_value is not None else None,
+                                unit=str(prop_unit) if prop_unit else None,
+                                measurement_condition=str(prop_condition) if prop_condition else None
+                            )
+                            properties_dto.append(prop_dto)
+                        except Exception as prop_e:
+                            # 個別の物性データでエラーが発生しても続行
+                            print(f"物性データ変換エラー（スキップ）: {prop_e}")
+                            continue
+            except Exception as props_e:
+                print(f"物性データ取得エラー（続行）: {props_e}")
+            
+            # DTOを作成（欠損はNone/[]に埋める）
+            material_name = material.name or getattr(material, 'name_official', None) or "名称不明"
+            material_name_official = getattr(material, 'name_official', None)
+            material_category = material.category or getattr(material, 'category_main', None)
+            material_category_main = getattr(material, 'category_main', None)
+            material_description = getattr(material, 'description', None)
+            
+            card_payload = MaterialCardPayload(
+                id=int(material.id),
+                name=str(material_name),
+                name_official=str(material_name_official) if material_name_official else None,
+                category=str(material_category) if material_category else None,
+                category_main=str(material_category_main) if material_category_main else None,
+                description=str(material_description) if material_description else None,
+                properties=properties_dto,
+                primary_image_path=str(primary_image_path) if primary_image_path else None,
+                primary_image_type=str(primary_image_type) if primary_image_type else None,
+                primary_image_description=str(primary_image_description) if primary_image_description else None
+            )
+            
+            card_data = MaterialCard(payload=card_payload)
+            card_html = generate_material_card(card_data)
+            
+        except Exception as e:
+            # エラーメッセージを保存
+            error_message = str(e)
+            import traceback
+            error_traceback = traceback.format_exc()
+            print(f"カード生成エラー: {error_message}")
+            print(error_traceback)
+            
+            # フォールバック：最低限の情報だけのカード
+            try:
+                material_name = material.name or getattr(material, 'name_official', None) or 'Unknown'
+                material_desc = material.description or 'No description'
+                card_html = f"""
+                <html>
+                <head>
+                    <meta charset="utf-8">
+                    <title>Material Card - {material_name}</title>
+                    <style>
+                        body {{ font-family: Arial, sans-serif; padding: 20px; }}
+                        h1 {{ color: #333; }}
+                        p {{ color: #666; }}
+                    </style>
+                </head>
+                <body>
+                    <h1>{material_name}</h1>
+                    <p><strong>ID:</strong> {material.id}</p>
+                    <p><strong>説明:</strong> {material_desc}</p>
+                    <p style="color: #999; font-size: 12px; margin-top: 20px;">※ 詳細なカード生成に失敗しました。基本情報のみ表示しています。</p>
+                </body>
+                </html>
+                """
+            except Exception as fallback_e:
+                # フォールバックも失敗した場合
+                card_html = f"""
+                <html>
+                <head>
+                    <meta charset="utf-8">
+                    <title>Material Card - Error</title>
+                </head>
+                <body>
+                    <h1>カード生成エラー</h1>
+                    <p>材料ID: {material.id if material else 'N/A'}</p>
+                    <p>エラー: {str(fallback_e)}</p>
+                </body>
+                </html>
+                """
+        
+        # エラーメッセージを表示
+        if error_message:
+            st.error(f"カード生成時にエラーが発生しました: {error_message}")
+            with st.expander("エラー詳細（開発者向け）"):
+                st.code(error_traceback if 'error_traceback' in locals() else error_message)
         
         # HTMLを表示
         try:

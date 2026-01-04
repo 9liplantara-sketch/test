@@ -161,17 +161,49 @@ def show_properties_tab(material):
         if material.processing_methods:
             methods = parse_json_field(material.processing_methods)
             if methods:
-                st.markdown(f"**加工方法**: {', '.join(methods)}")
+                # 文字化け防止：Markdownエスケープして表示
+                methods_display = ', '.join([m.replace('*', '\\*').replace('_', '\\_') for m in methods])
+                st.markdown(f"**加工方法**: {methods_display}")
         if material.equipment_level:
-            st.markdown(f"**必要設備レベル**: {material.equipment_level}")
+            # 文字化け防止：Markdownエスケープ
+            equipment_display = str(material.equipment_level).replace('*', '\\*').replace('_', '\\_')
+            st.markdown(f"**必要設備レベル**: {equipment_display}")
     
     with col2:
         # 試作難易度（フィールド名のバリエーションに対応）
         difficulty = getattr(material, 'prototyping_difficulty', None) or getattr(material, 'prototype_difficulty', None)
         if difficulty:
-            st.markdown(f"**試作難易度**: {difficulty}")
+            # 文字化け防止：Markdownエスケープ
+            difficulty_display = str(difficulty).replace('*', '\\*').replace('_', '\\_')
+            st.markdown(f"**試作難易度**: {difficulty_display}")
         if material.processing_other:
-            st.markdown(f"**その他加工情報**: {material.processing_other}")
+            # 文字化け防止：Markdownエスケープ
+            processing_other_display = str(material.processing_other).replace('*', '\\*').replace('_', '\\_')
+            st.markdown(f"**その他加工情報**: {processing_other_display}")
+    
+    # 加工例画像セクション
+    if material.processing_methods:
+        methods = parse_json_field(material.processing_methods)
+        if methods:
+            st.markdown("---")
+            st.markdown("### 加工例")
+            from utils.process_image_generator import get_process_example_image
+            
+            # 加工方法ごとに画像を表示（最大3列）
+            cols = st.columns(min(3, len(methods)))
+            for idx, method in enumerate(methods):
+                with cols[idx % 3]:
+                    # 加工例画像を取得/生成
+                    img_path = get_process_example_image(method)
+                    if img_path:
+                        try:
+                            from PIL import Image as PILImage
+                            pil_img = PILImage.open(img_path)
+                            st.image(pil_img, caption=method, width=280, use_container_width=False)
+                        except Exception as e:
+                            st.caption(f"{method} (画像読み込みエラー)")
+                    else:
+                        st.caption(f"{method} (画像準備中)")
 
 
 def show_procurement_uses_tab(material):
