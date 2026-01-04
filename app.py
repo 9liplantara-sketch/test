@@ -5,6 +5,7 @@ StreamlitベースのWebアプリケーション
 import streamlit as st
 import os
 from pathlib import Path
+from typing import Optional
 from PIL import Image as PILImage
 import qrcode
 from io import BytesIO
