@@ -127,12 +127,16 @@ class Material(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
+    # 画像パス（生成物）
+    texture_image_path = Column(String(500))  # テクスチャ画像パス（相対パス）
+    
     # リレーション
     properties = relationship("Property", back_populates="material", cascade="all, delete-orphan")
     images = relationship("Image", back_populates="material", cascade="all, delete-orphan")
     metadata_items = relationship("MaterialMetadata", back_populates="material", cascade="all, delete-orphan")
     reference_urls = relationship("ReferenceURL", back_populates="material", cascade="all, delete-orphan")
     use_examples = relationship("UseExample", back_populates="material", cascade="all, delete-orphan")
+    process_example_images = relationship("ProcessExampleImage", back_populates="material", cascade="all, delete-orphan")
 
 
 class Property(Base):
@@ -210,9 +214,43 @@ class UseExample(Base):
     material = relationship("Material", back_populates="use_examples")
 
 
+class ProcessExampleImage(Base):
+    """加工例画像テーブル"""
+    __tablename__ = "process_example_images"
+
+    id = Column(Integer, primary_key=True, index=True)
+    material_id = Column(Integer, ForeignKey("materials.id"), nullable=False)
+    process_method = Column(String(100), nullable=False)  # 加工方法名（例: "射出成形"）
+    image_path = Column(String(500), nullable=False)  # 画像パス（相対パス）
+    description = Column(Text)  # 説明
+    source_name = Column(String(255), default="Generated")  # 出典名
+    source_url = Column(String(500))  # 出典URL
+    license_note = Column(Text)  # ライセンス表記
+
+    # リレーション
+    material = relationship("Material", back_populates="process_example_images")
+
+
 # データベーステーブルの作成
 def init_db():
+    """データベースを初期化（既存テーブルは保持）"""
     Base.metadata.create_all(bind=engine)
+    
+    # 既存データベースへのカラム追加（安全にALTER）
+    try:
+        from sqlalchemy import inspect, text
+        inspector = inspect(engine)
+        existing_columns = [col['name'] for col in inspector.get_columns('materials')]
+        
+        # texture_image_pathカラムが存在しない場合は追加
+        if 'texture_image_path' not in existing_columns:
+            with engine.connect() as conn:
+                conn.execute(text("ALTER TABLE materials ADD COLUMN texture_image_path VARCHAR(500)"))
+                conn.commit()
+            print("✓ texture_image_pathカラムを追加しました")
+    except Exception as e:
+        # 既に存在するか、その他のエラー（無視して続行）
+        print(f"スキーマ拡張チェック: {e}")
 
 
 # データベースセッションの依存性注入用

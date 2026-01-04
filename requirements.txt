@@ -16,3 +16,8 @@ python-multipart>=0.0.6
 python-jose[cryptography]>=3.3.0
 passlib[bcrypt]>=1.7.4
 plotly>=5.18.0
+
+# 画像生成API（オプション、使用するAPIに応じて選択）
+# openai>=1.0.0  # OpenAI DALL-E用
+# stability-sdk>=0.8.0  # Stability AI用
+# anthropic>=0.18.0  # Anthropic Claude用（将来）

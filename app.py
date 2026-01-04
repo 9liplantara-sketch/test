@@ -16,7 +16,7 @@ import plotly.graph_objects as go
 from datetime import datetime, timedelta
 from collections import Counter
 
-from database import SessionLocal, Material, Property, Image, MaterialMetadata, ReferenceURL, UseExample, init_db
+from database import SessionLocal, Material, Property, Image, MaterialMetadata, ReferenceURL, UseExample, ProcessExampleImage, init_db
 from sqlalchemy.orm import selectinload
 from sqlalchemy import select, func
 from card_generator import generate_material_card
@@ -637,8 +637,9 @@ def get_all_materials():
                 selectinload(Material.properties),
                 selectinload(Material.images),
                 selectinload(Material.metadata_items),
-                selectinload(Material.reference_urls),  # 追加
-                selectinload(Material.use_examples),    # 追加
+                selectinload(Material.reference_urls),
+                selectinload(Material.use_examples),
+                selectinload(Material.process_example_images),  # 加工例画像
             )
             .order_by(Material.created_at.desc() if hasattr(Material, 'created_at') else Material.id.desc())
         )
@@ -657,8 +658,9 @@ def get_material_by_id(material_id: int):
                 selectinload(Material.properties),
                 selectinload(Material.images),
                 selectinload(Material.metadata_items),
-                selectinload(Material.reference_urls),  # 追加
-                selectinload(Material.use_examples),    # 追加
+                selectinload(Material.reference_urls),
+                selectinload(Material.use_examples),
+                selectinload(Material.process_example_images),  # 加工例画像
             )
             .filter(Material.id == material_id)
         )

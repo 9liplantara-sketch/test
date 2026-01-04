@@ -117,6 +117,86 @@ Streamlit Cloudでは再起動時に一時ファイルが消える可能性が�
 - **images**: 画像情報
 - **metadata**: メタデータ
 
+## 画像生成機能
+
+### 概要
+
+材料データベースの各材料について、以下の画像を自動生成できます：
+
+- **テクスチャ画像** (1024x1024): 材料の表面テクスチャ
+- **用途写真** (1280x720): 実際の使用例（内装/プロダクト等）
+- **加工例画像** (1280x720): 加工プロセスの写真
+
+### 画像生成の実行
+
+#### 1. 環境変数の設定
+
+使用する画像生成APIに応じて環境変数を設定：
+
+```bash
+# OpenAI DALL-E 3を使用する場合
+export IMAGE_API_PROVIDER=openai
+export OPENAI_API_KEY=your_api_key_here
+
+# Stability AIを使用する場合
+export IMAGE_API_PROVIDER=stability
+export STABILITY_API_KEY=your_api_key_here
+```
+
+#### 2. 必要なライブラリのインストール
+
+```bash
+# OpenAI DALL-E 3の場合
+pip install openai
+
+# Stability AIの場合
+pip install stability-sdk
+```
+
+#### 3. 画像生成スクリプトの実行
+
+```bash
+# テストモード（最初の3材料のみ）
+python scripts/generate_images.py --test
+
+# 特定の材料のみ生成
+python scripts/generate_images.py --material-ids 1 2 3
+
+# 全材料を生成（既存画像はスキップ）
+python scripts/generate_images.py
+
+# 既存画像も再生成
+python scripts/generate_images.py --no-skip-existing
+```
+
+#### 4. 生成された画像の保存先
+
+- テクスチャ画像: `static/material_textures/{material_id}_{slug}.png`
+- 用途写真: `static/use_cases/{material_id}_{slug}.png`
+- 加工例画像: `static/process_examples/{material_id}_{slug}.png`
+
+これらのディレクトリは`.gitignore`で除外されているため、Git管理外です。
+
+### 画像生成の仕様
+
+- **形式**: PNG（RGB固定、透明は白背景に合成）
+- **テクスチャ**: 1024x1024
+- **用途/加工例**: 1280x720
+- **命名規則**: `{material_id}_{slug}.png`
+- **レート制限**: API呼び出し間隔2秒（環境変数`RATE_LIMIT_DELAY`で変更可能）
+- **リトライ**: 最大3回（環境変数`MAX_RETRIES`で変更可能）
+
+### プロンプトテンプレート
+
+カテゴリ別に最適化されたプロンプトが自動生成されます：
+
+- **木材**: 木目テクスチャ、自然光
+- **金属**: 反射面、工業照明
+- **樹脂**: 滑らかな表面、スタジオ照明
+- **セラミック/ガラス**: 光沢/マット仕上げ
+
+詳細は`scripts/prompt_templates.py`を参照してください。
+
 ## 今後の拡張予定
 
 1. PDF形式での素材カード出力

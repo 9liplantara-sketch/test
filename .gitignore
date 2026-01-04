@@ -21,6 +21,11 @@ uploads/*
 # 生成物（起動時に自動生成されるためGit管理しない）
 static/generated/
 
+# 画像生成物（APIで生成された画像）
+static/material_textures/
+static/use_cases/
+static/process_examples/
+
 # IDE
 .vscode/
 .idea/

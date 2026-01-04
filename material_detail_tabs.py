@@ -80,6 +80,18 @@ def show_material_detail_tabs(material):
 
 def show_properties_tab(material):
     """タブ1: 材料物性"""
+    # テクスチャ画像を表示（上部）
+    if hasattr(material, 'texture_image_path') and material.texture_image_path:
+        from utils.paths import resolve_path
+        texture_path = resolve_path(material.texture_image_path)
+        if texture_path.exists():
+            try:
+                from PIL import Image as PILImage
+                img = PILImage.open(texture_path)
+                st.image(img, caption="テクスチャ画像", use_container_width=True)
+            except Exception as e:
+                st.caption(f"テクスチャ画像読み込みエラー: {e}")
+    
     st.markdown("### 基本特性")
     
     # 基本情報をグリッド表示
@@ -161,49 +173,88 @@ def show_properties_tab(material):
         if material.processing_methods:
             methods = parse_json_field(material.processing_methods)
             if methods:
-                # 文字化け防止：Markdownエスケープして表示
-                methods_display = ', '.join([m.replace('*', '\\*').replace('_', '\\_') for m in methods])
-                st.markdown(f"**加工方法**: {methods_display}")
+                # 文字化け防止：改行を適切に処理し、Markdownエスケープ
+                # リスト形式で表示（読みやすく）
+                st.markdown("**加工方法**:")
+                for method in methods:
+                    # 括弧や記号をエスケープせず、そのまま表示（st.writeを使用）
+                    st.write(f"  • {method}")
         if material.equipment_level:
-            # 文字化け防止：Markdownエスケープ
-            equipment_display = str(material.equipment_level).replace('*', '\\*').replace('_', '\\_')
-            st.markdown(f"**必要設備レベル**: {equipment_display}")
+            # 文字化け防止：st.writeを使用（Markdown解釈を避ける）
+            st.write(f"**必要設備レベル**: {material.equipment_level}")
     
     with col2:
         # 試作難易度（フィールド名のバリエーションに対応）
         difficulty = getattr(material, 'prototyping_difficulty', None) or getattr(material, 'prototype_difficulty', None)
         if difficulty:
-            # 文字化け防止：Markdownエスケープ
-            difficulty_display = str(difficulty).replace('*', '\\*').replace('_', '\\_')
-            st.markdown(f"**試作難易度**: {difficulty_display}")
+            # 文字化け防止：st.writeを使用
+            st.write(f"**試作難易度**: {difficulty}")
         if material.processing_other:
-            # 文字化け防止：Markdownエスケープ
-            processing_other_display = str(material.processing_other).replace('*', '\\*').replace('_', '\\_')
-            st.markdown(f"**その他加工情報**: {processing_other_display}")
+            # 文字化け防止：st.writeを使用
+            st.write(f"**その他加工情報**: {material.processing_other}")
     
-    # 加工例画像セクション
+    # 加工例画像セクション（材料別の生成画像を優先）
     if material.processing_methods:
         methods = parse_json_field(material.processing_methods)
         if methods:
             st.markdown("---")
             st.markdown("### 加工例")
-            from utils.process_image_generator import get_process_example_image
+            
+            # データベースから材料別の加工例画像を取得
+            from database import SessionLocal, ProcessExampleImage
+            from utils.paths import resolve_path
+            
+            db = SessionLocal()
+            try:
+                process_images = db.query(ProcessExampleImage).filter(
+                    ProcessExampleImage.material_id == material.id
+                ).all()
+                
+                # 加工方法と画像のマッピング
+                process_image_map = {p.process_method: p.image_path for p in process_images if p.image_path}
+            finally:
+                db.close()
             
             # 加工方法ごとに画像を表示（最大3列）
             cols = st.columns(min(3, len(methods)))
             for idx, method in enumerate(methods):
                 with cols[idx % 3]:
-                    # 加工例画像を取得/生成
-                    img_path = get_process_example_image(method)
-                    if img_path:
-                        try:
-                            from PIL import Image as PILImage
-                            pil_img = PILImage.open(img_path)
-                            st.image(pil_img, caption=method, width=280, use_container_width=False)
-                        except Exception as e:
-                            st.caption(f"{method} (画像読み込みエラー)")
-                    else:
-                        st.caption(f"{method} (画像準備中)")
+                    try:
+                        # 材料別の生成画像を優先
+                        image_path = None
+                        if method in process_image_map:
+                            image_path = process_image_map[method]
+                        
+                        # 材料別画像がない場合、汎用画像を試す
+                        if not image_path:
+                            from utils.process_image_generator import get_process_example_image
+                            image_path = get_process_example_image(method, output_dir="static/generated/process_examples")
+                        
+                        if image_path:
+                            # パスを解決
+                            resolved_path = resolve_path(image_path) if not Path(image_path).is_absolute() else Path(image_path)
+                            
+                            if resolved_path.exists():
+                                from PIL import Image as PILImage
+                                pil_img = PILImage.open(resolved_path)
+                                # RGBモードに変換
+                                if pil_img.mode != 'RGB':
+                                    rgb_img = PILImage.new('RGB', pil_img.size, (255, 255, 255))
+                                    if pil_img.mode == 'RGBA':
+                                        rgb_img.paste(pil_img, mask=pil_img.split()[3])
+                                    else:
+                                        rgb_img = pil_img.convert('RGB')
+                                    pil_img = rgb_img
+                                st.image(pil_img, caption=method, width=280, use_container_width=False)
+                            else:
+                                st.caption(f"{method} (画像ファイルが見つかりません)")
+                        else:
+                            st.caption(f"{method} (画像準備中)")
+                    except Exception as e:
+                        import traceback
+                        st.caption(f"{method} (エラー: {str(e)[:50]})")
+                        if os.getenv("DEBUG", "false").lower() == "true":
+                            st.code(traceback.format_exc())
 
 
 def show_procurement_uses_tab(material):
@@ -284,9 +335,9 @@ def show_procurement_uses_tab(material):
                     ">{cat}</div>
                     """, unsafe_allow_html=True)
     
-    # 代表的な使用例（UseExample）- 画像付き表示
+    # 代表的な使用例（UseExample）- 画像付き表示（用途写真ギャラリー）
     st.markdown("---")
-    st.markdown("### 代表的な使用例")
+    st.markdown("### 代表的な使用例（用途写真ギャラリー）")
     
     try:
         # eager load済みのuse_examplesにアクセス
@@ -296,6 +347,7 @@ def show_procurement_uses_tab(material):
         else:
             # データベースから直接取得を試みる（フォールバック）
             from database import SessionLocal, UseExample
+            from utils.paths import resolve_path
             db = SessionLocal()
             try:
                 use_examples_list = db.query(UseExample).filter(UseExample.material_id == material.id).all()
@@ -321,8 +373,31 @@ def show_procurement_uses_tab(material):
                 cols = st.columns(min(3, len(examples)))
                 for idx, use_ex in enumerate(examples):
                     with cols[idx % 3]:
-                        # 画像を表示
-                        display_use_example_image(use_ex, width=280, use_container_width=False)
+                        # 画像を表示（生成された用途写真を優先）
+                        from utils.paths import resolve_path
+                        image_displayed = False
+                        
+                        if use_ex.image_path:
+                            try:
+                                img_path = resolve_path(use_ex.image_path)
+                                if img_path.exists():
+                                    from PIL import Image as PILImage
+                                    img = PILImage.open(img_path)
+                                    if img.mode != 'RGB':
+                                        rgb_img = PILImage.new('RGB', img.size, (255, 255, 255))
+                                        if img.mode == 'RGBA':
+                                            rgb_img.paste(img, mask=img.split()[3])
+                                        else:
+                                            rgb_img = img.convert('RGB')
+                                        img = rgb_img
+                                    st.image(img, caption=use_ex.example_name, width=280, use_container_width=False)
+                                    image_displayed = True
+                            except Exception as e:
+                                print(f"用途写真読み込みエラー: {e}")
+                        
+                        # 画像がない場合は既存の表示関数を使用
+                        if not image_displayed:
+                            display_use_example_image(use_ex, width=280, use_container_width=False)
                         
                         # タイトル
                         st.markdown(f"**{use_ex.example_name or '用途例'}**")
