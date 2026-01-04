@@ -438,6 +438,36 @@ def show_layer1_form():
         key="visibility"
     )
     
+    st.markdown("---")
+    st.markdown("### 9. 主要元素リスト（STEP 6: 材料×元素マッピング）")
+    
+    st.info("💡 **思考の補助**として、この材料に含まれる主要元素の原子番号を入力してください。\n\n例: 水 (H₂O) → `1, 8`、鉄 (Fe) → `26`、プラスチック (C, H, O) → `1, 6, 8`")
+    
+    main_elements_input = st.text_input(
+        "主要元素の原子番号（カンマ区切り）",
+        placeholder="例: 1, 6, 8 または 26",
+        help="1-118の範囲で、カンマ区切りで入力してください",
+        key="main_elements_input"
+    )
+    
+    if main_elements_input:
+        try:
+            # カンマ区切りの文字列をパース
+            elements_list = [int(e.strip()) for e in main_elements_input.split(",") if e.strip().isdigit()]
+            # 1-118の範囲に制限
+            elements_list = [e for e in elements_list if 1 <= e <= 118]
+            if elements_list:
+                form_data['main_elements'] = json.dumps(elements_list, ensure_ascii=False)
+                st.success(f"✅ {len(elements_list)}個の元素を登録: {elements_list}")
+            else:
+                form_data['main_elements'] = None
+                st.warning("⚠️ 有効な原子番号（1-118）が見つかりませんでした。")
+        except Exception as e:
+            form_data['main_elements'] = None
+            st.warning(f"⚠️ 入力形式が正しくありません: {e}")
+    else:
+        form_data['main_elements'] = None
+    
     return form_data
 
 
@@ -616,6 +646,8 @@ def save_material(form_data):
             circularity=form_data.get('circularity'),
             certifications=json.dumps(form_data.get('certifications', []), ensure_ascii=False),
             certifications_other=form_data.get('certifications_other'),
+            # STEP 6: 材料×元素マッピング
+            main_elements=form_data.get('main_elements'),
             # 後方互換性
             name=form_data['name_official'],
             category=form_data['category_main']

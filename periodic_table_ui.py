@@ -85,12 +85,50 @@ def get_element_category_color(category: str) -> str:
 
 
 def show_periodic_table():
-    """周期表ページを表示（UI先行実装）"""
+    """周期表ページを表示（材料×元素マッピング対応）"""
     st.markdown('<h2 class="section-title">元素周期表</h2>', unsafe_allow_html=True)
     
     # セッションステートの初期化
     if "selected_element_atomic_number" not in st.session_state:
         st.session_state.selected_element_atomic_number = None
+    if "selected_material_id_for_elements" not in st.session_state:
+        st.session_state.selected_material_id_for_elements = None
+    
+    # 材料選択セクション
+    st.markdown("### 材料を選んで元素をハイライト")
+    
+    # 材料一覧を取得
+    try:
+        from app import get_all_materials
+        materials = get_all_materials()
+        
+        if materials:
+            material_options = {
+                "材料を選択...": None
+            }
+            for m in materials:
+                material_name = m.name_official or m.name or f"材料ID: {m.id}"
+                material_options[material_name] = m.id
+            
+            selected_material_name = st.selectbox(
+                "材料を選択",
+                list(material_options.keys()),
+                index=0,
+                key="material_selector_periodic_table"
+            )
+            
+            if selected_material_name and selected_material_name != "材料を選択...":
+                st.session_state.selected_material_id_for_elements = material_options[selected_material_name]
+            else:
+                st.session_state.selected_material_id_for_elements = None
+        else:
+            st.info("材料が登録されていません。")
+            st.session_state.selected_material_id_for_elements = None
+    except Exception as e:
+        st.warning(f"材料データの読み込みエラー: {e}")
+        st.session_state.selected_material_id_for_elements = None
+    
+    st.markdown("---")
     
     # 検索フィルタ
     col1, col2, col3 = st.columns(3)
@@ -128,6 +166,24 @@ def show_periodic_table():
         if element:
             st.session_state.selected_element_atomic_number = element["atomic_number"]
     
+    # 選択された材料の主要元素リストを取得
+    highlighted_elements = set()
+    selected_material = None
+    if st.session_state.selected_material_id_for_elements:
+        try:
+            from app import get_material_by_id
+            selected_material = get_material_by_id(st.session_state.selected_material_id_for_elements)
+            if selected_material and selected_material.main_elements:
+                import json
+                try:
+                    elements_list = json.loads(selected_material.main_elements)
+                    if isinstance(elements_list, list):
+                        highlighted_elements = set(int(e) for e in elements_list if isinstance(e, (int, str)) and str(e).isdigit())
+                except:
+                    pass
+        except Exception as e:
+            st.warning(f"材料データの取得エラー: {e}")
+    
     # 選択された元素を取得
     selected_element = None
     if st.session_state.selected_element_atomic_number:
@@ -139,19 +195,45 @@ def show_periodic_table():
     with col_left:
         st.markdown("### 周期表")
         
-        # 周期表の表示
-        render_periodic_table(st.session_state.selected_element_atomic_number)
+        # 選択された材料の情報を表示
+        if selected_material and highlighted_elements:
+            material_name = selected_material.name_official or selected_material.name or f"材料ID: {selected_material.id}"
+            st.info(f"📌 **{material_name}** に含まれる元素をハイライト表示中（{len(highlighted_elements)}元素）")
+        
+        # 周期表の表示（ハイライト対応）
+        render_periodic_table(
+            selected_atomic_number=st.session_state.selected_element_atomic_number,
+            highlighted_elements=highlighted_elements
+        )
     
     with col_right:
         st.markdown("### 元素詳細")
         if selected_element:
             render_element_detail_panel(selected_element)
+        elif selected_material and highlighted_elements:
+            st.markdown(f"#### 選択中の材料: {material_name}")
+            st.markdown(f"**含まれる主要元素**: {len(highlighted_elements)}元素")
+            if highlighted_elements:
+                elements_info = []
+                for atomic_num in sorted(highlighted_elements):
+                    element = get_element_by_atomic_number(atomic_num)
+                    if element:
+                        symbol = element.get("symbol", "")
+                        name_ja = element.get("name_ja", "")
+                        elements_info.append(f"{symbol} ({name_ja})")
+                st.markdown(", ".join(elements_info))
         else:
             st.info("周期表から元素をクリックするか、検索フィルタを使用してください。")
 
 
-def render_periodic_table(selected_atomic_number: Optional[int] = None):
-    """周期表をレンダリング"""
+def render_periodic_table(
+    selected_atomic_number: Optional[int] = None,
+    highlighted_elements: Optional[set] = None
+):
+    """周期表をレンダリング（材料×元素マッピング対応）"""
+    if highlighted_elements is None:
+        highlighted_elements = set()
+    
     # 周期表のヘッダー（族番号）
     header_cols = st.columns(18)
     for i, col in enumerate(header_cols, 1):
@@ -160,21 +242,28 @@ def render_periodic_table(selected_atomic_number: Optional[int] = None):
     
     # 周期1-7の表示
     for period in range(1, 8):
-        render_period_row(period, selected_atomic_number)
+        render_period_row(period, selected_atomic_number, highlighted_elements)
     
     # ランタノイド（fブロック）
     st.markdown("---")
     st.markdown("#### ランタノイド（fブロック）")
-    render_f_block(LANTHANIDES, selected_atomic_number)
+    render_f_block(LANTHANIDES, selected_atomic_number, highlighted_elements)
     
     # アクチノイド（fブロック）
     st.markdown("---")
     st.markdown("#### アクチノイド（fブロック）")
-    render_f_block(ACTINIDES, selected_atomic_number)
+    render_f_block(ACTINIDES, selected_atomic_number, highlighted_elements)
 
 
-def render_period_row(period: int, selected_atomic_number: Optional[int] = None):
-    """周期の行をレンダリング"""
+def render_period_row(
+    period: int,
+    selected_atomic_number: Optional[int] = None,
+    highlighted_elements: Optional[set] = None
+):
+    """周期の行をレンダリング（材料×元素マッピング対応）"""
+    if highlighted_elements is None:
+        highlighted_elements = set()
+    
     cols = st.columns(18)
     
     layout = PERIODIC_TABLE_LAYOUT.get(period, {})
@@ -189,36 +278,63 @@ def render_period_row(period: int, selected_atomic_number: Optional[int] = None)
             else:
                 element = get_element_by_atomic_number(atomic_num)
                 if element:
-                    render_element_cell(element, selected_atomic_number == atomic_num)
+                    is_selected = selected_atomic_number == atomic_num
+                    is_highlighted = atomic_num in highlighted_elements
+                    render_element_cell(element, is_selected, is_highlighted)
 
 
-def render_f_block(atomic_numbers: List[int], selected_atomic_number: Optional[int] = None):
-    """fブロック（ランタノイド・アクチノイド）をレンダリング"""
+def render_f_block(
+    atomic_numbers: List[int],
+    selected_atomic_number: Optional[int] = None,
+    highlighted_elements: Optional[set] = None
+):
+    """fブロック（ランタノイド・アクチノイド）をレンダリング（材料×元素マッピング対応）"""
+    if highlighted_elements is None:
+        highlighted_elements = set()
+    
     cols = st.columns(15)
     
     for idx, atomic_num in enumerate(atomic_numbers):
         with cols[idx]:
             element = get_element_by_atomic_number(atomic_num)
             if element:
-                render_element_cell(element, selected_atomic_number == atomic_num)
+                is_selected = selected_atomic_number == atomic_num
+                is_highlighted = atomic_num in highlighted_elements
+                render_element_cell(element, is_selected, is_highlighted)
 
 
-def render_element_cell(element: Dict, is_selected: bool = False):
-    """元素セルをレンダリング（クリック可能）"""
+def render_element_cell(element: Dict, is_selected: bool = False, is_highlighted: bool = False):
+    """元素セルをレンダリング（クリック可能、材料×元素マッピング対応）"""
     atomic_num = element["atomic_number"]
     symbol = element.get("symbol", f"E{atomic_num}")
     group = element.get("group", "未分類")
     bg_color = get_element_category_color(group)
     
-    # 選択状態のスタイル
-    border_style = "3px solid #1a1a1a" if is_selected else "1px solid #ccc"
-    bg_color_selected = "#FFD700" if is_selected else bg_color
+    # 選択状態とハイライト状態のスタイル
+    if is_selected:
+        border_style = "3px solid #1a1a1a"
+        bg_color_selected = "#FFD700"  # 選択時は金色
+    elif is_highlighted:
+        border_style = "2px solid #667eea"  # ハイライト時は青い枠
+        bg_color_selected = bg_color  # 背景色はそのまま
+    else:
+        border_style = "1px solid #ccc"
+        bg_color_selected = bg_color
     
     # ボタンとして表示（クリック可能）
     button_key = f"element_{atomic_num}"
     
     # 元素名を取得（日本語優先）
     name = element.get("name_ja") or element.get("name_en") or f"Element {atomic_num}"
+    
+    # ハイライト時の追加スタイル
+    highlight_style = ""
+    if is_highlighted and not is_selected:
+        # ハイライト時は背景色を少し明るく、影を追加
+        highlight_style = f"""
+        box-shadow: 0 0 8px 2px rgba(102, 126, 234, 0.6) !important;
+        opacity: 1 !important;
+        """
     
     # カスタムスタイルを先に適用
     st.markdown(
@@ -232,6 +348,7 @@ def render_element_cell(element: Dict, is_selected: bool = False):
             height: 60px !important;
             white-space: pre-line !important;
             line-height: 1.2 !important;
+            {highlight_style}
         }}
         button[key="{button_key}"]:hover {{
             opacity: 0.8;

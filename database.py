@@ -116,6 +116,9 @@ class Material(Base):
     question_templates = Column(Text)  # "問い"テンプレ（複数選択）（JSON文字列）
     question_answers = Column(Text)  # その問いへの回答
     
+    # STEP 6: 材料×元素のマッピング
+    main_elements = Column(Text)  # 主要元素リスト（原子番号のJSON配列、例: [1, 6, 8]）
+    
     # 旧フィールド（後方互換性のため保持）
     name = Column(String(255))  # 旧name（後方互換）
     category = Column(String(100), index=True)  # 旧category（後方互換）
