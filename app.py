@@ -888,35 +888,71 @@ def show_home():
         st.markdown('<h3 class="section-title">最近登録された材料</h3>', unsafe_allow_html=True)
         recent_materials = sorted(materials, key=lambda x: x.created_at if x.created_at else datetime.min, reverse=True)[:6]
         
-        cols = st.columns(3)
-        for idx, material in enumerate(recent_materials):
-            with cols[idx % 3]:
-                with st.container():
-                    # サブ画像をカード内に装飾として追加
-                    sub_img_html = ""
-                    sub_img_path = get_image_path("サブ.webp")
-                    if sub_img_path:
-                        try:
-                            sub_img_small = PILImage.open(sub_img_path)
-                            sub_img_small.thumbnail((100, 100), PILImage.Resampling.LANCZOS)
-                            buffer = BytesIO()
-                            sub_img_small.save(buffer, format='WEBP')
-                            img_base64 = base64.b64encode(buffer.getvalue()).decode()
-                            sub_img_html = f'<div style="position: absolute; top: 10px; right: 10px; opacity: 0.1; width: 80px; height: 80px; background: url(\"data:image/webp;base64,{img_base64}\"); background-size: contain; background-repeat: no-repeat;"></div>'
-                        except:
-                            pass
+        # 2カラムレイアウト（左: サムネ、右: 情報）
+        for material in recent_materials:
+            with st.container():
+                col_img, col_info = st.columns([1, 3])
+                
+                with col_img:
+                    # サムネ画像を表示（utils/image_display.pyを使用）
+                    from utils.image_display import get_material_image
+                    pil_img, img_status, img_message = get_material_image(material, Path.cwd(), auto_regenerate=True)
                     
-                    st.markdown(f"""
-                    <div class="material-card-container material-texture" style="position: relative;">
-                        {sub_img_html}
-                        <h3 style="color: #667eea; margin-top: 0; font-size: 1.4rem; font-weight: 700; position: relative; z-index: 1;">{material.name}</h3>
-                        <span class="category-badge" style="position: relative; z-index: 1;">{material.category or '未分類'}</span>
-                        <p style="color: #666; margin-top: 20px; line-height: 1.6; position: relative; z-index: 1;">{material.description[:100] if material.description else '説明なし'}...</p>
-                        <div style="margin-top: 20px; position: relative; z-index: 1;">
-                            <small style="color: #999;">登録日: {material.created_at.strftime('%Y/%m/%d') if material.created_at else 'N/A'}</small>
-                        </div>
-                    </div>
-                    """, unsafe_allow_html=True)
+                    if pil_img and img_status == "ok":
+                        # サムネサイズにリサイズ（aspect ratio 1:1）
+                        thumb_size = (120, 120)
+                        pil_img.thumbnail(thumb_size, PILImage.Resampling.LANCZOS)
+                        st.image(pil_img, width=120, use_container_width=False)
+                    else:
+                        # プレースホルダー（黒画像は出さない）
+                        placeholder = PILImage.new('RGB', (120, 120), (240, 240, 240))
+                        from PIL import ImageDraw, ImageFont
+                        draw = ImageDraw.Draw(placeholder)
+                        try:
+                            font = ImageFont.truetype("/System/Library/Fonts/Helvetica.ttc", 14)
+                        except:
+                            font = ImageFont.load_default()
+                        text = "画像なし"
+                        bbox = draw.textbbox((0, 0), text, font=font)
+                        text_width = bbox[2] - bbox[0]
+                        text_height = bbox[3] - bbox[1]
+                        draw.text(
+                            ((120 - text_width) // 2, (120 - text_height) // 2),
+                            text,
+                            fill=(150, 150, 150),
+                            font=font
+                        )
+                        st.image(placeholder, width=120, use_container_width=False)
+                
+                with col_info:
+                    # 材料名
+                    st.markdown(f"### {material.name_official or material.name}")
+                    
+                    # カテゴリバッジ
+                    category_name = material.category_main or material.category or '未分類'
+                    if len(category_name) > 20:
+                        category_display = category_name[:17] + "..."
+                        category_title = category_name
+                    else:
+                        category_display = category_name
+                        category_title = ""
+                    st.markdown(f'<span class="category-badge" title="{category_title}">{category_display}</span>', unsafe_allow_html=True)
+                    
+                    # 説明
+                    if material.description:
+                        st.markdown(f"<p style='color: #666; margin-top: 8px; font-size: 0.9rem;'>{material.description[:100]}{'...' if len(material.description) > 100 else ''}</p>", unsafe_allow_html=True)
+                    
+                    # 主要物性（1〜2個）
+                    if material.properties:
+                        props = material.properties[:2]
+                        prop_text = " / ".join([f"{p.property_name}: {p.value} {p.unit or ''}" for p in props])
+                        st.markdown(f"<small style='color: #999;'>{prop_text}</small>", unsafe_allow_html=True)
+                    
+                    # 登録日
+                    if material.created_at:
+                        st.markdown(f"<small style='color: #999;'>登録日: {material.created_at.strftime('%Y/%m/%d')}</small>", unsafe_allow_html=True)
+                
+                st.markdown("---")
     
     # 将来の機能（iconmonstr風のアイコンを使用）
     st.markdown("---")
