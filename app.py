@@ -29,7 +29,7 @@ if 'PORT' in os.environ:
 # ページ設定
 st.set_page_config(
     page_title="マテリアルデータベース | Material Database",
-    page_icon="🔬",
+    page_icon=None,
     layout="wide",
     initial_sidebar_state="expanded",
     menu_items=None
@@ -66,6 +66,20 @@ sub_bg_path = get_image_path("サブ.webp")
 main_bg_base64 = get_base64_image(main_bg_path) if main_bg_path else None
 sub_bg_base64 = get_base64_image(sub_bg_path) if sub_bg_path else None
 
+# グレーのシンプルな記号を生成（SVG）
+def generate_simple_symbol(symbol_type="square", size=48, color="#999999"):
+    """シンプルなグレーの記号をSVGで生成"""
+    symbols = {
+        "square": f'<svg width="{size}" height="{size}" xmlns="http://www.w3.org/2000/svg"><rect width="{size}" height="{size}" fill="{color}"/></svg>',
+        "circle": f'<svg width="{size}" height="{size}" xmlns="http://www.w3.org/2000/svg"><circle cx="{size//2}" cy="{size//2}" r="{size//2-2}" fill="{color}"/></svg>',
+        "triangle": f'<svg width="{size}" height="{size}" xmlns="http://www.w3.org/2000/svg"><polygon points="{size//2},2 {size-2},{size-2} 2,{size-2}" fill="{color}"/></svg>',
+        "diamond": f'<svg width="{size}" height="{size}" xmlns="http://www.w3.org/2000/svg"><polygon points="{size//2},2 {size-2},{size//2} {size//2},{size-2} 2,{size//2}" fill="{color}"/></svg>',
+        "line": f'<svg width="{size}" height="{size}" xmlns="http://www.w3.org/2000/svg"><line x1="2" y1="{size//2}" x2="{size-2}" y2="{size//2}" stroke="{color}" stroke-width="3"/></svg>',
+        "plus": f'<svg width="{size}" height="{size}" xmlns="http://www.w3.org/2000/svg"><line x1="{size//2}" y1="2" x2="{size//2}" y2="{size-2}" stroke="{color}" stroke-width="3"/><line x1="2" y1="{size//2}" x2="{size-2}" y2="{size//2}" stroke="{color}" stroke-width="3"/></svg>',
+    }
+    svg = symbols.get(symbol_type, symbols["square"])
+    return base64.b64encode(svg.encode()).decode()
+
 # デバッグスイッチ（サイドバーでCSSを無効化可能）
 # 注意: この変数はmain()関数内で設定されるため、ここでは定義のみ
 debug_no_css = False
@@ -87,27 +101,15 @@ def get_custom_css():
         color: #1a1a1a !important;
     }}
     
-    /* メイン背景 - メイン.webpを使用 */
+    /* メイン背景 - WOTA風シンプル（白背景） */
     .stApp {{
-        background: {'url("data:image/webp;base64,' + main_bg_base64 + '")' if main_bg_base64 else '#f8f9fa'};
-        background-size: cover;
-        background-position: center;
-        background-attachment: fixed;
-        background-repeat: no-repeat;
+        background: #ffffff;
         position: relative;
         min-height: 100vh;
     }}
     
     .stApp::before {{
-        content: '';
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background: rgba(255, 255, 255, 0.85);
-        z-index: -1;
-        pointer-events: none;
+        display: none;
     }}
     
     .main .block-container {{
@@ -121,25 +123,20 @@ def get_custom_css():
     
     /* ヘッダー - WOTA風シンプルデザイン */
     .main-header {{
-        font-size: 3.5rem;
-        font-weight: 700;
+        font-size: 2.5rem;
+        font-weight: 600;
         color: #1a1a1a;
-        text-align: center;
+        text-align: left;
         margin-bottom: 0.5rem;
         letter-spacing: -0.02em;
         position: relative;
         z-index: 2;
-        line-height: 1.2;
+        line-height: 1.3;
+        margin-top: 0;
     }}
     
     .main-header::after {{
-        content: '';
-        display: block;
-        width: 60px;
-        height: 2px;
-        background: #1a1a1a;
-        margin: 24px auto;
-        border-radius: 1px;
+        display: none;
     }}
     
     /* サブ背景画像を装飾として使用（非表示に変更 - 白飛び防止） */
@@ -368,37 +365,22 @@ def get_custom_css():
         margin: 30px 0;
     }}
     
-    /* ヒーローセクション */
+    /* ヒーローセクション - WOTA風シンプル */
     .hero-section {{
-        background: rgba(255, 255, 255, 0.7);
-        backdrop-filter: blur(20px);
-        border-radius: 30px;
-        padding: 60px 40px;
-        text-align: center;
+        background: #ffffff;
+        border-radius: 0;
+        padding: 40px 0;
+        text-align: left;
         margin: 40px 0;
-        box-shadow: 0 12px 48px rgba(0, 0, 0, 0.15),
-                    inset 0 1px 0 rgba(255, 255, 255, 0.9);
-        border: 1px solid rgba(255, 255, 255, 0.8);
+        box-shadow: none;
+        border: none;
+        border-bottom: 1px solid rgba(0, 0, 0, 0.08);
         position: relative;
         overflow: hidden;
     }}
     
     .hero-section::before {{
-        content: '';
-        position: absolute;
-        top: -50%;
-        left: -50%;
-        width: 200%;
-        height: 200%;
-        background: {'url("data:image/webp;base64,' + sub_bg_base64 + '")' if sub_bg_base64 else 'none'};
-        background-size: 50%;
-        opacity: 0.05;
-        animation: float 30s ease-in-out infinite;
-    }}
-    
-    @keyframes float {{
-        0%, 100% {{ transform: translate(0, 0) rotate(0deg); }}
-        50% {{ transform: translate(20px, 20px) rotate(5deg); }}
+        display: none;
     }}
     
     /* セクションタイトル - WOTA風 */
@@ -437,6 +419,30 @@ def get_custom_css():
         font-size: 15px;
         line-height: 1.6;
         color: #1a1a1a;
+    }}
+    
+    /* 統計情報を左下に固定表示 */
+    .stats-fixed {{
+        position: fixed;
+        bottom: 20px;
+        left: 20px;
+        background: rgba(255, 255, 255, 0.95);
+        padding: 12px 20px;
+        border: 1px solid rgba(0, 0, 0, 0.08);
+        font-size: 11px;
+        color: #666;
+        z-index: 1000;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    }}
+    
+    .stats-fixed div {{
+        margin: 2px 0;
+    }}
+    
+    .stats-fixed strong {{
+        color: #1a1a1a;
+        font-weight: 600;
     }}
 </style>
 """
@@ -635,7 +641,7 @@ def main():
     
     # ヘッダー - WOTA風シンプル
     st.markdown('<h1 class="main-header">マテリアルデータベース</h1>', unsafe_allow_html=True)
-    st.markdown('<p style="text-align: center; color: #666; font-size: 1.1rem; margin-bottom: 3rem; font-weight: 400; letter-spacing: 0.01em;">素材の可能性を探索するデータベース</p>', unsafe_allow_html=True)
+    st.markdown('<p style="text-align: left; color: #666; font-size: 0.95rem; margin-bottom: 3rem; font-weight: 400; letter-spacing: 0.01em;">素材の可能性を探索するデータベース</p>', unsafe_allow_html=True)
     
     # サイドバー - WOTA風シンプル
     with st.sidebar:
@@ -653,28 +659,27 @@ def main():
         
         st.markdown("---")
         
-        # 統計情報
+        # 統計情報（画面左下に小さく表示）
         materials = get_all_materials()
-        st.markdown("### 統計情報")
         
-        col1, col2 = st.columns(2)
-        with col1:
-            st.metric("材料数", len(materials), delta=None)
-        with col2:
-            if materials:
-                categories = len(set([m.category for m in materials if m.category]))
-                st.metric("カテゴリ", categories)
+        # SQLで直接カウント（DetachedInstanceError回避）
+        db = get_db()
+        try:
+            total_properties = db.execute(select(func.count(Property.id))).scalar() or 0
+        finally:
+            db.close()
         
-        if materials:
-            # SQLで直接カウント（DetachedInstanceError回避）
-            db = get_db()
-            try:
-                total_properties = db.execute(select(func.count(Property.id))).scalar() or 0
-            finally:
-                db.close()
-            st.metric("物性データ", total_properties)
+        categories = len(set([m.category for m in materials if m.category])) if materials else 0
         
-        st.markdown("---")
+        # 左下に小さく配置
+        st.markdown("""
+        <div class="stats-fixed">
+            <div>材料数: <strong>{}</strong></div>
+            <div>カテゴリ: <strong>{}</strong></div>
+            <div>物性データ: <strong>{}</strong></div>
+        </div>
+        """.format(len(materials), categories, total_properties), unsafe_allow_html=True)
+        
         st.markdown("""
         <div style="text-align: center; padding: 20px 0; color: #666;">
             <small>Material Database v1.0</small>
@@ -714,7 +719,7 @@ def show_home():
             with col2:
                 st.markdown("""
                 <div class="hero-section">
-                    <h2 style="color: #2c3e50; margin-bottom: 20px; font-size: 2.5rem; font-weight: 800;">✨ ようこそ！</h2>
+                    <h2 style="color: #1a1a1a; margin-bottom: 20px; font-size: 2rem; font-weight: 600; letter-spacing: -0.01em;">ようこそ</h2>
                     <p style="font-size: 1.2rem; color: #555; line-height: 1.8; max-width: 800px; margin: 0 auto; font-weight: 500;">
                         素材カード形式でマテリアル情報を管理する、美しく使いやすいデータベースシステムです。<br>
                         デザイナーやエンジニアが、材料の可能性を探索するためのツールです。
@@ -738,48 +743,58 @@ def show_home():
         # 画像がない場合の通常表示
         st.markdown("""
         <div class="hero-section">
-            <h2 style="color: #2c3e50; margin-bottom: 20px; font-size: 2.5rem; font-weight: 800;">✨ ようこそ！</h2>
-            <p style="font-size: 1.2rem; color: #555; line-height: 1.8; max-width: 800px; margin: 0 auto; font-weight: 500;">
-                素材カード形式でマテリアル情報を管理する、美しく使いやすいデータベースシステムです。<br>
+            <h2 style="color: #1a1a1a; margin-bottom: 20px; font-size: 2rem; font-weight: 600; letter-spacing: -0.01em;">ようこそ</h2>
+            <p style="font-size: 1rem; color: #666; line-height: 1.8; max-width: 800px; margin: 0 auto; font-weight: 400;">
+                素材カード形式でマテリアル情報を管理するデータベースシステムです。<br>
                 デザイナーやエンジニアが、材料の可能性を探索するためのツールです。
             </p>
         </div>
         """, unsafe_allow_html=True)
     
-    # 機能紹介カード
-    st.markdown('<h3 class="section-title">🎯 主な機能</h3>', unsafe_allow_html=True)
+    # 機能紹介カード（グレーのシンプルな記号を使用）
+    st.markdown('<h3 class="section-title">主な機能</h3>', unsafe_allow_html=True)
     col1, col2, col3 = st.columns(3)
     
+    symbol1 = generate_simple_symbol("square", 40, "#999999")
+    symbol2 = generate_simple_symbol("circle", 40, "#999999")
+    symbol3 = generate_simple_symbol("triangle", 40, "#999999")
+    
     with col1:
-        st.markdown("""
+        st.markdown(f"""
         <div class="stat-card">
-            <div style="font-size: 3.5rem; margin-bottom: 15px;">📝</div>
-            <h3 style="color: #2c3e50; margin: 15px 0;">材料登録</h3>
-            <p style="color: #666; margin: 0;">簡単に材料情報を登録・管理</p>
+            <div style="margin-bottom: 15px; text-align: center;">
+                <img src="data:image/svg+xml;base64,{symbol1}" style="width: 40px; height: 40px; opacity: 0.6;" />
+            </div>
+            <h3 style="color: #1a1a1a; margin: 15px 0; font-weight: 600; font-size: 1.1rem;">材料登録</h3>
+            <p style="color: #666; margin: 0; font-size: 14px;">簡単に材料情報を登録・管理</p>
         </div>
         """, unsafe_allow_html=True)
     
     with col2:
-        st.markdown("""
+        st.markdown(f"""
         <div class="stat-card">
-            <div style="font-size: 2rem; margin-bottom: 15px; color: #1a1a1a; font-weight: 600;">ダッシュボード</div>
-            <h3 style="color: #2c3e50; margin: 15px 0;">データ可視化</h3>
-            <p style="color: #666; margin: 0;">グラフで材料データを分析</p>
+            <div style="margin-bottom: 15px; text-align: center;">
+                <img src="data:image/svg+xml;base64,{symbol2}" style="width: 40px; height: 40px; opacity: 0.6;" />
+            </div>
+            <h3 style="color: #1a1a1a; margin: 15px 0; font-weight: 600; font-size: 1.1rem;">データ可視化</h3>
+            <p style="color: #666; margin: 0; font-size: 14px;">グラフで材料データを分析</p>
         </div>
         """, unsafe_allow_html=True)
     
     with col3:
-        st.markdown("""
+        st.markdown(f"""
         <div class="stat-card">
-            <div style="font-size: 3.5rem; margin-bottom: 15px;">🎨</div>
-            <h3 style="color: #2c3e50; margin: 15px 0;">素材カード</h3>
-            <p style="color: #666; margin: 0;">美しい素材カードを自動生成</p>
+            <div style="margin-bottom: 15px; text-align: center;">
+                <img src="data:image/svg+xml;base64,{symbol3}" style="width: 40px; height: 40px; opacity: 0.6;" />
+            </div>
+            <h3 style="color: #1a1a1a; margin: 15px 0; font-weight: 600; font-size: 1.1rem;">素材カード</h3>
+            <p style="color: #666; margin: 0; font-size: 14px;">素材カードを自動生成</p>
         </div>
         """, unsafe_allow_html=True)
     
     # 最近登録された材料
     if materials:
-        st.markdown('<h3 class="section-title">⭐ 最近登録された材料</h3>', unsafe_allow_html=True)
+        st.markdown('<h3 class="section-title">最近登録された材料</h3>', unsafe_allow_html=True)
         recent_materials = sorted(materials, key=lambda x: x.created_at if x.created_at else datetime.min, reverse=True)[:6]
         
         cols = st.columns(3)
@@ -812,25 +827,28 @@ def show_home():
                     </div>
                     """, unsafe_allow_html=True)
     
-    # 将来の機能
+    # 将来の機能（グレーのシンプルな記号を使用）
     st.markdown("---")
-    st.markdown('<h3 class="section-title">🚀 将来の機能（LLM統合予定）</h3>', unsafe_allow_html=True)
+    st.markdown('<h3 class="section-title">将来の機能（LLM統合予定）</h3>', unsafe_allow_html=True)
     
     future_features = [
-        ("🤖", "自然言語検索", "「高強度で軽量な材料」など、自然な言葉で検索"),
-        ("🎯", "材料推奨", "要件に基づいて最適な材料を自動推奨"),
-        ("物性予測", "AIによる物性データの予測"),
-        ("🔗", "類似度分析", "材料間の類似性を分析")
+        ("diamond", "自然言語検索", "「高強度で軽量な材料」など、自然な言葉で検索"),
+        ("plus", "材料推奨", "要件に基づいて最適な材料を自動推奨"),
+        ("line", "物性予測", "AIによる物性データの予測"),
+        ("circle", "類似度分析", "材料間の類似性を分析")
     ]
     
     cols = st.columns(4)
-    for idx, (icon, title, desc) in enumerate(future_features):
+    for idx, (symbol_type, title, desc) in enumerate(future_features):
+        symbol = generate_simple_symbol(symbol_type, 48, "#999999")
         with cols[idx]:
             st.markdown(f"""
             <div class="material-card-container" style="padding: 25px; text-align: center;">
-                <div style="font-size: 3rem; margin-bottom: 15px;">{icon}</div>
-                <h4 style="color: #2c3e50; margin: 15px 0; font-weight: 700;">{title}</h4>
-                <p style="color: #666; font-size: 0.95rem; margin: 0; line-height: 1.6;">{desc}</p>
+                <div style="margin-bottom: 15px; text-align: center;">
+                    <img src="data:image/svg+xml;base64,{symbol}" style="width: 48px; height: 48px; opacity: 0.6;" />
+                </div>
+                <h4 style="color: #1a1a1a; margin: 15px 0; font-weight: 600; font-size: 1rem;">{title}</h4>
+                <p style="color: #666; font-size: 13px; margin: 0; line-height: 1.6;">{desc}</p>
             </div>
             """, unsafe_allow_html=True)
 
