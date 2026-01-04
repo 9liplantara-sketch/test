@@ -83,9 +83,19 @@ def generate_plastic_texture(name, color_base=(200, 200, 200), size=(800, 600)):
 
 
 def generate_material_image(material_name, category, output_dir="uploads"):
-    """材料のイメージ画像を生成"""
+    """
+    材料のイメージ画像を生成（黒画像を防ぐ修正版）
+    
+    Args:
+        material_name: 材料名
+        category: カテゴリ
+        output_dir: 出力ディレクトリ
+    
+    Returns:
+        生成された画像ファイルのパス（相対パス）
+    """
     output_path = Path(output_dir)
-    output_path.mkdir(exist_ok=True)
+    output_path.mkdir(parents=True, exist_ok=True)
     
     # カテゴリに応じたテクスチャ生成
     if "木材" in category or "木" in category:
@@ -119,46 +129,86 @@ def generate_material_image(material_name, category, output_dir="uploads"):
         # デフォルト
         img = Image.new('RGB', (800, 600), (200, 200, 200))
     
+    # 重要: 必ずRGBモードに変換（RGBA/LA/Pモードを排除して黒画像を防ぐ）
+    if img.mode != 'RGB':
+        # 透明部分がある場合は白背景に合成
+        if img.mode in ('RGBA', 'LA', 'P'):
+            rgb_img = Image.new('RGB', img.size, (255, 255, 255))  # 白背景
+            if img.mode == 'RGBA':
+                rgb_img.paste(img, mask=img.split()[3])  # alphaチャンネルをマスクとして使用
+            elif img.mode == 'LA':
+                rgb_img.paste(img.convert('RGB'), mask=img.split()[1])
+            else:  # P (パレット)
+                rgb_img = img.convert('RGB')
+            img = rgb_img
+        else:
+            img = img.convert('RGB')
+    
     # ファイル名を生成（安全な形式）
     safe_name = "".join(c for c in material_name if c.isalnum() or c in (' ', '-', '_')).rstrip()
-    filename = f"{safe_name.replace(' ', '_')}.webp"
+    filename = f"{safe_name.replace(' ', '_')}.png"  # WebPからPNGに変更（環境依存を避ける）
     filepath = output_path / filename
     
-    # WebP形式で保存
-    img.save(filepath, 'WEBP', quality=85)
+    # PNG形式で保存（WebPは環境依存があるため避ける）
+    img.save(filepath, 'PNG', quality=95)
     
-    return str(filepath)
+    # 相対パスを返す（プロジェクトルートからの相対パス）
+    try:
+        return str(filepath.relative_to(Path.cwd()))
+    except ValueError:
+        # 相対パスに変換できない場合は、相対パス文字列を返す
+        return str(Path(output_dir) / filename)
 
 
 def ensure_material_image(material_name, category, material_id, db):
-    """材料の画像が存在しない場合、生成してデータベースに登録"""
-    from database import Image as ImageModel
+    """
+    材料の画像が存在しない場合、生成してデータベースに登録（修正版）
     
-    # 既存の画像をチェック
+    Args:
+        material_name: 材料名
+        category: カテゴリ
+        material_id: 材料ID
+        db: データベースセッション
+    
+    Returns:
+        正規化された画像パス（相対パス）またはNone
+    """
+    from database import Image as ImageModel
+    from utils.image_health import normalize_image_path, resolve_image_path, check_image_health
+    
+    # 既存の画像をチェック（健康状態も確認）
     existing = db.query(ImageModel).filter(ImageModel.material_id == material_id).first()
     if existing:
-        return existing.file_path
+        # 既存画像の健康状態をチェック
+        health = check_image_health(existing.file_path)
+        if health["status"] == "ok":
+            # 正規化されたパスを返す
+            normalized = normalize_image_path(existing.file_path)
+            return normalized
+        # 健康状態が悪い場合は再生成
     
     # 画像を生成
     try:
         image_path = generate_material_image(material_name, category)
         if not image_path:
             return None
-            
-        file_name = Path(image_path).name
         
-        # データベースに登録
+        # パスを正規化（相対パスに統一）
+        normalized_path = normalize_image_path(image_path)
+        file_name = Path(normalized_path).name  # ファイル名のみ
+        
+        # データベースに登録（相対パスで保存）
         db_image = ImageModel(
             material_id=material_id,
-            file_path=file_name,
+            file_path=normalized_path,  # 相対パス全体を保存（例: "uploads/material_123.png"）
             image_type="generated",
             description=f"{material_name}の生成画像"
         )
         db.add(db_image)
         db.flush()
         
-        print(f"  ✓ 画像生成: {file_name}")
-        return file_name
+        print(f"  ✓ 画像生成: {normalized_path}")
+        return normalized_path
     except Exception as e:
         print(f"  ✗ 画像生成エラー ({material_name}): {e}")
         import traceback

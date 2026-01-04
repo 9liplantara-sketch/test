@@ -635,8 +635,15 @@ def main():
     # サンプルデータの自動投入（初回起動時のみ）
     ensure_sample_data()
     
+    # 画像の自動修復（起動時）
+    from utils.ensure_images import ensure_images
+    ensure_images(Path.cwd())
+    
     # デバッグスイッチ（サイドバーでCSSを無効化可能）
     debug_no_css = st.sidebar.checkbox("Debug: CSSを無効化", value=False, help="白飛びが発生している場合、このチェックをONにするとCSSを無効化して表示を確認できます")
+    
+    # 画像診断モード（開発用）
+    debug_images = st.sidebar.checkbox("🔍 画像診断モード", value=False, help="画像の健康状態を診断します（原因切り分け用）")
     
     # CSS適用（デバッグモードでない場合のみ）
     if not debug_no_css:
@@ -709,6 +716,13 @@ def main():
             <small>Material Database v1.0</small>
         </div>
         """, unsafe_allow_html=True)
+    
+    # 画像診断モード（デバッグ時のみ表示）
+    if debug_images:
+        from utils.image_diagnostics import show_image_diagnostics
+        materials = get_all_materials()
+        show_image_diagnostics(materials, Path.cwd())
+        return  # 診断モード時は他のページを表示しない
     
     # ページルーティング
     if page == "ホーム":

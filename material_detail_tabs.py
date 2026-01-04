@@ -271,26 +271,56 @@ def show_procurement_uses_tab(material):
         finally:
             db.close()
     
-    # 用途イメージ画像
+    # 用途イメージ画像（画像表示の1本化）
     st.markdown("---")
     st.markdown("### 用途イメージ画像")
     
-    # 材料の画像を表示
+    # 材料の画像を表示（健康状態チェック付き）
+    from utils.image_display import display_material_image
+    
     if material.images:
         cols = st.columns(min(3, len(material.images)))
         for idx, img in enumerate(material.images):
             with cols[idx % 3]:
-                img_path = get_image_path(img.file_path)
-                if img_path:
-                    try:
-                        pil_img = PILImage.open(img_path)
-                        st.image(pil_img, caption=img.description or f"画像 {idx+1}", use_container_width=True)
-                    except Exception as e:
-                        st.warning(f"画像の読み込みに失敗: {e}")
+                # 各画像レコードに対して表示（簡易版：最初の画像のみ詳細チェック）
+                if idx == 0:
+                    # 最初の画像は詳細チェック付きで表示
+                    display_material_image(
+                        material,
+                        caption=img.description or f"画像 {idx+1}",
+                        use_container_width=True
+                    )
                 else:
-                    st.info(f"画像が見つかりません: {img.file_path}")
+                    # 2枚目以降は従来の方法（後で改善可能）
+                    img_path = get_image_path(img.file_path)
+                    if img_path:
+                        try:
+                            pil_img = PILImage.open(img_path)
+                            # RGBモードに変換
+                            if pil_img.mode != 'RGB':
+                                if pil_img.mode in ('RGBA', 'LA', 'P'):
+                                    rgb_img = PILImage.new('RGB', pil_img.size, (255, 255, 255))
+                                    if pil_img.mode == 'RGBA':
+                                        rgb_img.paste(pil_img, mask=pil_img.split()[3])
+                                    elif pil_img.mode == 'LA':
+                                        rgb_img.paste(pil_img.convert('RGB'), mask=pil_img.split()[1])
+                                    else:
+                                        rgb_img = pil_img.convert('RGB')
+                                    pil_img = rgb_img
+                                else:
+                                    pil_img = pil_img.convert('RGB')
+                            st.image(pil_img, caption=img.description or f"画像 {idx+1}", use_container_width=True)
+                        except Exception as e:
+                            st.warning(f"画像の読み込みに失敗: {e}")
+                    else:
+                        st.info(f"画像が見つかりません: {img.file_path}")
     else:
-        st.info("用途イメージ画像が登録されていません。")
+        # 画像がない場合は自動生成を試みる
+        display_material_image(
+            material,
+            caption="自動生成画像",
+            use_container_width=True
+        )
 
 
 def show_history_story_tab(material):
