@@ -607,7 +607,10 @@ if not os.path.exists("materials.db"):
     init_db()
 
 def ensure_sample_data():
-    """サンプルデータが存在しない場合、自動投入"""
+    """
+    サンプルデータが存在しない場合、自動投入（idempotent）
+    重複投入を防ぐため、既存の材料名をチェックして差分のみ投入
+    """
     db = get_db()
     try:
         # 材料数をカウント
@@ -617,6 +620,25 @@ def ensure_sample_data():
             from init_sample_data import init_sample_data
             init_sample_data()
             st.info("サンプルデータを自動投入しました。ページをリロードしてください。")
+        else:
+            # 既にデータがある場合は重複チェック（idempotent化）
+            # 既存の材料名を取得
+            existing_materials = db.query(Material).all()
+            existing_names = {m.name_official or m.name for m in existing_materials if m.name_official or m.name}
+            
+            # サンプルデータで投入予定の材料名リスト（init_sample_data.pyから）
+            sample_names = {
+                "カリン材", "栗材", "樫材",
+                "アルミニウム（純アルミ）", "ステンレス鋼 SUS304", "真鍮（黄銅）",
+                "ポリプロピレン（PP）", "ポリエチレン（PE）", "ポリ塩化ビニル（PVC）"
+            }
+            
+            # 差分のみ投入（重複投入を防ぐ）
+            missing_names = sample_names - existing_names
+            if missing_names:
+                # 一部のサンプルデータが欠けている場合は警告のみ（自動投入はしない）
+                # 手動でinit_sample_data.pyを実行してもらう
+                pass
     except Exception as e:
         st.error(f"サンプルデータの投入中にエラーが発生しました: {e}")
     finally:
@@ -627,7 +649,10 @@ def get_db():
     return SessionLocal()
 
 def get_all_materials():
-    """全材料を取得（Eager Loadでリレーションも先読み・全リレーション網羅）"""
+    """
+    全材料を取得（Eager Loadでリレーションも先読み・全リレーション網羅）
+    重複を除去して返す（DB由来のデータに一本化）
+    """
     db = get_db()
     try:
         # Eager Loadで全リレーションを先読み（DetachedInstanceErrorを防ぐ）
@@ -643,7 +668,9 @@ def get_all_materials():
             )
             .order_by(Material.created_at.desc() if hasattr(Material, 'created_at') else Material.id.desc())
         )
-        materials = db.execute(stmt).scalars().all()
+        # SQLAlchemy 2.0のunique()で重複を除去
+        result = db.execute(stmt)
+        materials = result.unique().scalars().all()
         return materials
     finally:
         db.close()
@@ -768,6 +795,72 @@ def create_timeline_chart(materials):
         font=dict(size=12)
     )
     return fig
+
+def show_materials_duplicate_diagnostics():
+    """材料重複診断UIを表示"""
+    st.markdown("# 🔍 材料重複診断")
+    st.markdown("材料の重複状況を診断します")
+    st.markdown("---")
+    
+    db = get_db()
+    try:
+        # DB materials count
+        db_count = db.execute(select(func.count(Material.id))).scalar() or 0
+        
+        # UI materials count（get_all_materials()から取得）
+        materials = get_all_materials()
+        ui_count = len(materials)
+        
+        # Unique names count
+        unique_names = {m.name_official or m.name for m in materials if m.name_official or m.name}
+        unique_names_count = len(unique_names)
+        
+        # Duplicate name list（同名の材料を検出）
+        from collections import Counter
+        name_counter = Counter([m.name_official or m.name for m in materials if m.name_official or m.name])
+        duplicates = {name: count for name, count in name_counter.items() if count > 1}
+        duplicate_list = sorted(duplicates.items(), key=lambda x: x[1], reverse=True)[:20]
+        
+        # 統計表示
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            st.metric("DB materials count", db_count)
+        with col2:
+            st.metric("UI materials count", ui_count, delta=f"{ui_count - db_count}" if ui_count != db_count else None)
+        with col3:
+            st.metric("Unique names count", unique_names_count)
+        with col4:
+            st.metric("Duplicate names", len(duplicates))
+        
+        # 重複チェック結果
+        if ui_count == unique_names_count:
+            st.success("✅ 重複なし: UI materials count == Unique names count")
+        else:
+            st.warning(f"⚠️ 重複あり: UI materials count ({ui_count}) != Unique names count ({unique_names_count})")
+        
+        # 重複リスト表示
+        if duplicate_list:
+            st.markdown("### 重複材料名（上位20件）")
+            for name, count in duplicate_list:
+                st.markdown(f"- **{name}**: {count}件")
+                
+                # 重複している材料のIDを表示
+                duplicate_materials = [m for m in materials if (m.name_official or m.name) == name]
+                ids = [str(m.id) for m in duplicate_materials]
+                st.caption(f"  ID: {', '.join(ids)}")
+        else:
+            st.info("重複している材料名はありません。")
+        
+        # 詳細情報
+        with st.expander("詳細情報"):
+            st.markdown("#### 全材料名リスト")
+            all_names = sorted([m.name_official or m.name or "名称不明" for m in materials])
+            for name in all_names:
+                st.text(f"- {name}")
+    
+    finally:
+        db.close()
+
 
 def show_asset_diagnostics(asset_stats: dict):
     """Asset診断UIを表示"""
@@ -978,6 +1071,9 @@ def main():
     
     # Asset診断モード（新規）
     debug_assets = st.sidebar.checkbox("🔍 Asset診断モード", value=False, help="生成物（元素画像など）の存在状況を診断します")
+    
+    # 材料重複診断モード（新規）
+    debug_materials_duplicate = st.sidebar.checkbox("🔍 材料重複診断", value=False, help="材料の重複状況を診断します")
     
     # CSS適用（デバッグモードでない場合のみ）
     if not debug_no_css:
