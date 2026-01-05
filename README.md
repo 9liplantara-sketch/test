@@ -158,6 +158,16 @@ public_url = upload_file_to_s3(
 
 詳細は `S3_SETUP.md` を参照してください。
 
+### Streamlit Cloudデプロイ
+
+Streamlit Cloudへのデプロイ手順と検証チェックリストは `STREAMLIT_CLOUD_DEPLOY.md` を参照してください。
+
+**主要な検証項目**:
+- Build SHA表示の確認
+- URL画像表示の確認（ローカルパスに依存しない）
+- プレースホルダー表示の確認
+- migrateスクリプトの動作確認
+
 ### 既存画像のS3移行
 
 既存のローカル画像をS3に移行するバッチスクリプトを用意しました：

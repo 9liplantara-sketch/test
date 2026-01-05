@@ -173,6 +173,24 @@ S3アップロードに必要な最小権限：
 
 **注意**: 機密情報を含むファイルは公開しないでください。
 
+## Streamlit Cloudでの設定
+
+詳細なデプロイ手順と検証チェックリストは `STREAMLIT_CLOUD_DEPLOY.md` を参照してください。
+
+### 簡易手順
+
+1. Streamlit Cloudのアプリ管理画面にアクセス
+2. 「Settings」→「Secrets」を開く
+3. 以下の形式でSecretsを追加：
+
+```toml
+S3_BUCKET = "your-bucket-name"
+AWS_ACCESS_KEY_ID = "your_access_key_id"
+AWS_SECRET_ACCESS_KEY = "your_secret_access_key"
+AWS_REGION = "ap-northeast-1"
+S3_PUBLIC_BASE_URL = "https://d1234567890.cloudfront.net"  # オプション
+```
+
 ## トラブルシューティング
 
 ### エラー: "S3_BUCKET環境変数が設定されていません"
