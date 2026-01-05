@@ -44,4 +44,7 @@ Thumbs.db
 .env
 .env.local
 
+# Streamlit Secrets（認証情報を含むためGit管理外）
+.streamlit/secrets.toml
+
 動画/

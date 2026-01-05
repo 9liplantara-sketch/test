@@ -21,3 +21,7 @@ plotly>=5.18.0
 # openai>=1.0.0  # OpenAI DALL-E用
 # stability-sdk>=0.8.0  # Stability AI用
 # anthropic>=0.18.0  # Anthropic Claude用（将来）
+
+# S3ストレージ（オプション、S3を使用する場合）
+boto3>=1.28.0
+botocore>=1.31.0

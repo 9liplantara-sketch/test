@@ -132,6 +132,32 @@ Streamlit Cloudでは再起動時に一時ファイルが消える可能性が�
 
 詳細は `DB_MIGRATION_S3_URL.md` を参照してください。
 
+### S3ストレージ設定
+
+画像ファイルをS3にアップロードする機能を実装しました。
+
+**環境変数設定**:
+- `S3_BUCKET`: S3バケット名（必須）
+- `AWS_ACCESS_KEY_ID`: AWSアクセスキー（必須）
+- `AWS_SECRET_ACCESS_KEY`: AWSシークレットキー（必須）
+- `AWS_REGION`: AWSリージョン（デフォルト: ap-northeast-1）
+- `S3_ENDPOINT_URL`: MinIO等の互換S3エンドポイント（オプション）
+- `S3_PUBLIC_BASE_URL`: CloudFront等のCDN URL（オプション）
+
+**使用方法**:
+```python
+from utils.s3_storage import upload_file_to_s3
+
+public_url = upload_file_to_s3(
+    local_path="static/material_textures/1_aluminum.png",
+    s3_key="material_textures/1_aluminum.png"
+)
+```
+
+**Streamlit Cloudでの設定**: `.streamlit/secrets.toml`またはSecrets管理画面で環境変数を設定してください。
+
+詳細は `S3_SETUP.md` を参照してください。
+
 ## 画像生成機能
 
 ### 概要
