@@ -6,16 +6,6 @@ import streamlit as st
 import os
 import subprocess
 
-def get_build_sha() -> str:
-    # Streamlit Cloudではgitコマンドが使えることが多い
-    try:
-        sha = subprocess.check_output(
-            ["git", "rev-parse", "--short", "HEAD"],
-            stderr=subprocess.DEVNULL,
-        ).decode().strip()
-        return sha
-    except Exception:
-        return "unknown"
 from pathlib import Path
 from typing import Optional
 from PIL import Image as PILImage
@@ -1032,7 +1022,6 @@ def get_assets_mode_stats():
 
 
 def main():
-     st.sidebar.caption(f"build: {get_build_sha()}")
     # ビルド情報をサイドバーに表示
     sha = get_git_sha()
     current_time = datetime.now().isoformat(timespec="seconds")
