@@ -372,6 +372,12 @@ def migrate_use_example_images(
                 print(f"[{idx}/{len(use_examples)}] ⚠️  スキップ: {error_msg}")
                 continue
             
+            # idempotent: 既にURLが設定されている場合はスキップ
+            if use_example.image_url and use_example.image_url.strip():
+                results["skipped"] += 1
+                print(f"[{idx}/{len(use_examples)}] ⏭️  スキップ: {use_example.image_path} (既にURLが設定されています)")
+                continue
+            
             # S3キーを構築
             s3_key = build_s3_key(use_example.material_id, "use_cases", use_example.image_path)
             
@@ -387,13 +393,17 @@ def migrate_use_example_images(
                         make_public=True
                     )
                     
-                    # DBにURLを保存
-                    use_example.image_url = public_url
-                    db.commit()
-                    
-                    print(f"[{idx}/{len(use_examples)}] ✅ 移行成功: {use_example.image_path} -> {public_url}")
-                    results["migrated"] += 1
+                    # DBにURLを保存（idempotent: 既にURLがあっても上書きしない）
+                    if not use_example.image_url or not use_example.image_url.strip():
+                        use_example.image_url = public_url
+                        db.commit()
+                        print(f"[{idx}/{len(use_examples)}] ✅ 移行成功: {use_example.image_path} -> {public_url}")
+                        results["migrated"] += 1
+                    else:
+                        results["skipped"] += 1
+                        print(f"[{idx}/{len(use_examples)}] ⏭️  スキップ: {use_example.image_path} (既にURLが設定されています)")
                 except Exception as e:
+                    # 例外時もアプリは落ちない（画像だけスキップ）
                     results["failed"] += 1
                     error_msg = f"S3アップロードエラー: {str(e)}"
                     results["errors"].append({
@@ -405,8 +415,10 @@ def migrate_use_example_images(
                     })
                     print(f"[{idx}/{len(use_examples)}] ❌ 失敗: {error_msg}")
                     db.rollback()
+                    # 例外をキャッチして続行（アプリは落ちない）
         
         except Exception as e:
+            # 例外時もアプリは落ちない（画像だけスキップ）
             results["failed"] += 1
             error_msg = f"予期しないエラー: {str(e)}"
             results["errors"].append({
@@ -417,6 +429,11 @@ def migrate_use_example_images(
                 "error": error_msg
             })
             print(f"[{idx}/{len(use_examples)}] ❌ エラー: {error_msg}")
+            # 例外をキャッチして続行（アプリは落ちない）
+            try:
+                db.rollback()
+            except:
+                pass
     
     return results
 
@@ -480,6 +497,12 @@ def migrate_process_example_images(
                 print(f"[{idx}/{len(process_images)}] ⚠️  スキップ: {error_msg}")
                 continue
             
+            # idempotent: 既にURLが設定されている場合はスキップ
+            if process_image.image_url and process_image.image_url.strip():
+                results["skipped"] += 1
+                print(f"[{idx}/{len(process_images)}] ⏭️  スキップ: {process_image.image_path} (既にURLが設定されています)")
+                continue
+            
             # S3キーを構築
             s3_key = build_s3_key(process_image.material_id, "process_examples", process_image.image_path)
             
@@ -495,13 +518,17 @@ def migrate_process_example_images(
                         make_public=True
                     )
                     
-                    # DBにURLを保存
-                    process_image.image_url = public_url
-                    db.commit()
-                    
-                    print(f"[{idx}/{len(process_images)}] ✅ 移行成功: {process_image.image_path} -> {public_url}")
-                    results["migrated"] += 1
+                    # DBにURLを保存（idempotent: 既にURLがあっても上書きしない）
+                    if not process_image.image_url or not process_image.image_url.strip():
+                        process_image.image_url = public_url
+                        db.commit()
+                        print(f"[{idx}/{len(process_images)}] ✅ 移行成功: {process_image.image_path} -> {public_url}")
+                        results["migrated"] += 1
+                    else:
+                        results["skipped"] += 1
+                        print(f"[{idx}/{len(process_images)}] ⏭️  スキップ: {process_image.image_path} (既にURLが設定されています)")
                 except Exception as e:
+                    # 例外時もアプリは落ちない（画像だけスキップ）
                     results["failed"] += 1
                     error_msg = f"S3アップロードエラー: {str(e)}"
                     results["errors"].append({
@@ -513,8 +540,10 @@ def migrate_process_example_images(
                     })
                     print(f"[{idx}/{len(process_images)}] ❌ 失敗: {error_msg}")
                     db.rollback()
+                    # 例外をキャッチして続行（アプリは落ちない）
         
         except Exception as e:
+            # 例外時もアプリは落ちない（画像だけスキップ）
             results["failed"] += 1
             error_msg = f"予期しないエラー: {str(e)}"
             results["errors"].append({
@@ -525,6 +554,11 @@ def migrate_process_example_images(
                 "error": error_msg
             })
             print(f"[{idx}/{len(process_images)}] ❌ エラー: {error_msg}")
+            # 例外をキャッチして続行（アプリは落ちない）
+            try:
+                db.rollback()
+            except:
+                pass
     
     return results
 
