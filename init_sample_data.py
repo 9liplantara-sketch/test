@@ -1,12 +1,14 @@
 """
 サンプルデータの初期化スクリプト（詳細仕様対応版）
 JIS規格に準拠したベーシックな材料データを作成
+べき等性を保証（何回実行しても重複投入されない）
 """
 import json
 import uuid
 from database import SessionLocal, Material, Property, Image, MaterialMetadata, ReferenceURL, UseExample, init_db
 from image_generator import ensure_material_image
 from datetime import datetime
+from utils.material_seed import get_or_create_material, get_or_create_property, get_or_create_use_example
 
 
 def init_sample_data():
@@ -20,27 +22,26 @@ def init_sample_data():
     db = SessionLocal()
     
     try:
-        # 既存の材料名を取得（重複投入を防ぐ）
-        existing_materials = db.query(Material).all()
-        existing_names = {m.name_official or m.name for m in existing_materials if m.name_official or m.name}
+        # 統計情報の初期化
+        stats = {"created": 0, "skipped": 0, "updated": 0}
+        
+        # 既存の材料数を取得（情報表示用）
+        existing_count = db.query(Material).count()
         
         materials_data = []
         print("サンプルデータの生成を開始します...")
         print("=" * 60)
-        print(f"既存材料数: {len(existing_names)}件")
-        if existing_names:
-            print(f"既存材料名: {', '.join(list(existing_names)[:5])}{'...' if len(existing_names) > 5 else ''}")
+        print(f"既存材料数: {existing_count}件")
         print("=" * 60)
         
         # ========== 木材 ==========
         
-        # 1. カリン材（重複チェック）
-        if "カリン材" in existing_names:
-            print("  ⏭️  スキップ: カリン材（既に登録されています）")
-        else:
-            material1 = Material(
-            uuid=str(uuid.uuid4()),
+        # 1. カリン材（get-or-createパターン）
+        material1, created = get_or_create_material(
+            db,
             name_official="カリン材",
+            name="カリン材",
+            uuid=str(uuid.uuid4()),
             name_aliases=json.dumps(["花梨", "カリン"], ensure_ascii=False),
             supplier_org="一般流通",
             supplier_type="企業",
@@ -65,35 +66,34 @@ def init_sample_data():
             cost_level="中",
             safety_tags=json.dumps(["皮膚接触OK"], ensure_ascii=False),
             visibility="公開（誰でも閲覧可）",
-            # 後方互換
-            name="カリン材",
             category="木材・紙・セルロース系",
             description="カリン（花梨）の木材。美しい木目と高い硬度が特徴。"
         )
-            db.add(material1)
+        
+        if created:
             db.flush()
+            print(f"  ✓ 作成: カリン材 (ID: {material1.id})")
+            stats["created"] += 1
             
-            db.add(Property(material_id=material1.id, property_name="密度", value=0.75, unit="g/cm³"))
-            db.add(Property(material_id=material1.id, property_name="JIS規格", value=None, unit="JAS（日本農林規格）"))
-            db.add(Property(material_id=material1.id, property_name="引張強度", value=85, unit="MPa"))
-            db.add(Property(material_id=material1.id, property_name="圧縮強度", value=50, unit="MPa"))
+            # 物性データを追加（get-or-create）
+            get_or_create_property(db, material1.id, "密度", value=0.75, unit="g/cm³")
+            get_or_create_property(db, material1.id, "JIS規格", value=None, unit="JAS（日本農林規格）")
+            get_or_create_property(db, material1.id, "引張強度", value=85, unit="MPa")
+            get_or_create_property(db, material1.id, "圧縮強度", value=50, unit="MPa")
             
             # 画像生成
-            print(f"  カリン材を登録中...")
             ensure_material_image("カリン材", "木材・紙・セルロース系", material1.id, db)
             materials_data.append(material1)
-            print(f"    ✓ カリン材 (ID: {material1.id})")
-            existing_names.add("カリン材")  # 追加したので既存リストに追加
-        
-        # 2. 栗材（重複チェック）
-        if "栗材" in existing_names:
-            print("  ⏭️  スキップ: 栗材（既に登録されています）")
-            material2 = None
         else:
-            print("  2. 栗材を登録中...")
-            material2 = Material(
-            uuid=str(uuid.uuid4()),
+            print(f"  ⏭️  スキップ: カリン材 (ID: {material1.id})（既に登録されています）")
+            stats["skipped"] += 1
+        
+        # 2. 栗材（get-or-createパターン）
+        material2, created = get_or_create_material(
+            db,
             name_official="栗材",
+            name="栗材",
+            uuid=str(uuid.uuid4()),
             name_aliases=json.dumps(["クリ", "チェスナット"], ensure_ascii=False),
             supplier_org="一般流通",
             supplier_type="企業",
@@ -118,31 +118,33 @@ def init_sample_data():
             cost_level="低",
             safety_tags=json.dumps(["皮膚接触OK"], ensure_ascii=False),
             visibility="公開（誰でも閲覧可）",
-            name="栗材",
             category="木材・紙・セルロース系",
             description="クリ（栗）の木材。軽量で加工しやすい。"
         )
-            db.add(material2)
+        
+        if created:
             db.flush()
+            print(f"  ✓ 作成: 栗材 (ID: {material2.id})")
+            stats["created"] += 1
             
-            db.add(Property(material_id=material2.id, property_name="密度", value=0.56, unit="g/cm³"))
-            db.add(Property(material_id=material2.id, property_name="引張強度", value=65, unit="MPa"))
-            db.add(Property(material_id=material2.id, property_name="圧縮強度", value=35, unit="MPa"))
+            # 物性データを追加（get-or-create）
+            get_or_create_property(db, material2.id, "密度", value=0.56, unit="g/cm³")
+            get_or_create_property(db, material2.id, "引張強度", value=65, unit="MPa")
+            get_or_create_property(db, material2.id, "圧縮強度", value=35, unit="MPa")
             
+            # 画像生成
             ensure_material_image("栗材", "木材・紙・セルロース系", material2.id, db)
             materials_data.append(material2)
-            print(f"    ✓ 栗材 (ID: {material2.id})")
-            existing_names.add("栗材")
-        
-        # 3. 樫材（重複チェック）
-        if "樫材" in existing_names:
-            print("  ⏭️  スキップ: 樫材（既に登録されています）")
-            material3 = None
         else:
-            print("  3. 樫材を登録中...")
-            material3 = Material(
-            uuid=str(uuid.uuid4()),
+            print(f"  ⏭️  スキップ: 栗材 (ID: {material2.id})（既に登録されています）")
+            stats["skipped"] += 1
+        
+        # 3. 樫材（get-or-createパターン）
+        material3, created = get_or_create_material(
+            db,
             name_official="樫材",
+            name="樫材",
+            uuid=str(uuid.uuid4()),
             name_aliases=json.dumps(["カシ", "オーク"], ensure_ascii=False),
             supplier_org="一般流通",
             supplier_type="企業",
@@ -167,34 +169,36 @@ def init_sample_data():
             cost_level="中",
             safety_tags=json.dumps(["皮膚接触OK"], ensure_ascii=False),
             visibility="公開（誰でも閲覧可）",
-            name="樫材",
             category="木材・紙・セルロース系",
             description="カシ（樫）の木材。非常に硬く、耐久性に優れる。"
         )
-            db.add(material3)
+        
+        if created:
             db.flush()
+            print(f"  ✓ 作成: 樫材 (ID: {material3.id})")
+            stats["created"] += 1
             
-            db.add(Property(material_id=material3.id, property_name="密度", value=0.75, unit="g/cm³"))
-            db.add(Property(material_id=material3.id, property_name="引張強度", value=95, unit="MPa"))
-            db.add(Property(material_id=material3.id, property_name="圧縮強度", value=55, unit="MPa"))
+            # 物性データを追加（get-or-create）
+            get_or_create_property(db, material3.id, "密度", value=0.75, unit="g/cm³")
+            get_or_create_property(db, material3.id, "引張強度", value=95, unit="MPa")
+            get_or_create_property(db, material3.id, "圧縮強度", value=55, unit="MPa")
             
+            # 画像生成
             ensure_material_image("樫材", "木材・紙・セルロース系", material3.id, db)
             materials_data.append(material3)
-            print(f"    ✓ 樫材 (ID: {material3.id})")
-            existing_names.add("樫材")
+        else:
+            print(f"  ⏭️  スキップ: 樫材 (ID: {material3.id})（既に登録されています）")
+            stats["skipped"] += 1
         
         # ========== 金属 ==========
         print("\n【金属】")
         
-        # 4. アルミニウム（純アルミ）（重複チェック）
-        if "アルミニウム（純アルミ）" in existing_names:
-            print("  ⏭️  スキップ: アルミニウム（純アルミ）（既に登録されています）")
-            material4 = None
-        else:
-            print("  4. アルミニウム（純アルミ）を登録中...")
-            material4 = Material(
-            uuid=str(uuid.uuid4()),
+        # 4. アルミニウム（純アルミ）（get-or-createパターン）
+        material4, created = get_or_create_material(
+            db,
             name_official="アルミニウム（純アルミ）",
+            name="アルミニウム（純アルミ）",
+            uuid=str(uuid.uuid4()),
             name_aliases=json.dumps(["Al", "アルミ", "A1050"], ensure_ascii=False),
             supplier_org="一般流通",
             supplier_type="企業",
@@ -220,57 +224,65 @@ def init_sample_data():
             cost_level="低",
             safety_tags=json.dumps(["食品接触OK", "皮膚接触OK"], ensure_ascii=False),
             visibility="公開（誰でも閲覧可）",
-            name="アルミニウム（純アルミ）",
             category="金属・合金",
             description="純アルミニウム。軽量で加工性が良く、耐食性に優れる。JIS H 4000準拠。"
         )
-            db.add(material4)
+        
+        if created:
             db.flush()
+            print(f"  ✓ 作成: アルミニウム（純アルミ） (ID: {material4.id})")
+            stats["created"] += 1
             
-            db.add(Property(material_id=material4.id, property_name="密度", value=2.70, unit="g/cm³"))
-            db.add(Property(material_id=material4.id, property_name="引張強度", value=70, unit="MPa"))
-            db.add(Property(material_id=material4.id, property_name="降伏強度", value=20, unit="MPa"))
-            db.add(Property(material_id=material4.id, property_name="融点", value=660, unit="°C"))
-            db.add(Property(material_id=material4.id, property_name="熱伝導率", value=237, unit="W/(m·K)"))
-            db.add(Property(material_id=material4.id, property_name="JIS規格", value=None, unit="JIS H 4000"))
+            # 物性データを追加（get-or-create）
+            get_or_create_property(db, material4.id, "密度", value=2.70, unit="g/cm³")
+            get_or_create_property(db, material4.id, "引張強度", value=70, unit="MPa")
+            get_or_create_property(db, material4.id, "降伏強度", value=20, unit="MPa")
+            get_or_create_property(db, material4.id, "融点", value=660, unit="°C")
+            get_or_create_property(db, material4.id, "熱伝導率", value=237, unit="W/(m·K)")
+            get_or_create_property(db, material4.id, "JIS規格", value=None, unit="JIS H 4000")
             
+            # 画像生成
             ensure_material_image("アルミニウム", "金属・合金", material4.id, db)
             
-            # 用途例を追加（画像付き）
+            # 用途例を追加（画像付き、get-or-create）
             from utils.use_example_image_generator import ensure_use_example_image
             use1_img = ensure_use_example_image("アルミニウム", "アルミ鍋", "キッチン")
             use2_img = ensure_use_example_image("アルミニウム", "アルミサッシ", "建築")
             
-            db.add(UseExample(
-                material_id=material4.id,
-                example_name="アルミ鍋",
+            get_or_create_use_example(
+                db,
+                material4.id,
+                "アルミ鍋",
                 domain="キッチン",
                 description="調理器具として広く使用される。熱伝導性が良く、軽量。",
                 image_path=use1_img or "",
                 source_name="Generated",
                 source_url="",
                 license_note="自前生成"
-            ))
-            db.add(UseExample(
-                material_id=material4.id,
-                example_name="アルミサッシ/外装材",
+            )
+            get_or_create_use_example(
+                db,
+                material4.id,
+                "アルミサッシ/外装材",
                 domain="建築",
                 description="建築外装材として使用。軽量で耐候性に優れる。",
                 image_path=use2_img or "",
                 source_name="Generated",
                 source_url="",
                 license_note="自前生成"
-            ))
+            )
             
             materials_data.append(material4)
-            print(f"    ✓ アルミニウム（純アルミ） (ID: {material4.id})")
-            existing_names.add("アルミニウム（純アルミ）")
+        else:
+            print(f"  ⏭️  スキップ: アルミニウム（純アルミ） (ID: {material4.id})（既に登録されています）")
+            stats["skipped"] += 1
         
-        # 5. ステンレス鋼 SUS304
-        print("  5. ステンレス鋼 SUS304を登録中...")
-        material5 = Material(
-            uuid=str(uuid.uuid4()),
+        # 5. ステンレス鋼 SUS304（get-or-createパターン）
+        material5, created = get_or_create_material(
+            db,
             name_official="ステンレス鋼 SUS304",
+            name="ステンレス鋼 SUS304",
+            uuid=str(uuid.uuid4()),
             name_aliases=json.dumps(["SUS304", "18-8ステンレス", "オーステナイト系ステンレス"], ensure_ascii=False),
             supplier_org="一般流通",
             supplier_type="企業",
@@ -296,52 +308,54 @@ def init_sample_data():
             cost_level="中",
             safety_tags=json.dumps(["食品接触OK", "皮膚接触OK"], ensure_ascii=False),
             visibility="公開（誰でも閲覧可）",
-            name="ステンレス鋼 SUS304",
             category="金属・合金",
             description="オーステナイト系ステンレス鋼。優れた耐食性と加工性を持つ。JIS G 4305準拠。"
         )
-            db.add(material5)
+        
+        if created:
             db.flush()
+            print(f"  ✓ 作成: ステンレス鋼 SUS304 (ID: {material5.id})")
+            stats["created"] += 1
             
-            db.add(Property(material_id=material5.id, property_name="密度", value=7.93, unit="g/cm³"))
-            db.add(Property(material_id=material5.id, property_name="引張強度", value=520, unit="MPa"))
-            db.add(Property(material_id=material5.id, property_name="降伏強度", value=205, unit="MPa"))
-            db.add(Property(material_id=material5.id, property_name="融点", value=1400, unit="°C"))
-            db.add(Property(material_id=material5.id, property_name="熱伝導率", value=16.3, unit="W/(m·K)"))
-            db.add(Property(material_id=material5.id, property_name="JIS規格", value=None, unit="JIS G 4305"))
-            db.add(Property(material_id=material5.id, property_name="主成分", value=None, unit="Fe, Cr 18%, Ni 8%"))
+            # 物性データを追加（get-or-create）
+            get_or_create_property(db, material5.id, "密度", value=7.93, unit="g/cm³")
+            get_or_create_property(db, material5.id, "引張強度", value=520, unit="MPa")
+            get_or_create_property(db, material5.id, "降伏強度", value=205, unit="MPa")
+            get_or_create_property(db, material5.id, "融点", value=1400, unit="°C")
+            get_or_create_property(db, material5.id, "熱伝導率", value=16.3, unit="W/(m·K)")
+            get_or_create_property(db, material5.id, "JIS規格", value=None, unit="JIS G 4305")
+            get_or_create_property(db, material5.id, "主成分", value=None, unit="Fe, Cr 18%, Ni 8%")
             
+            # 画像生成
             ensure_material_image("ステンレス鋼", "金属・合金", material5.id, db)
             
-            # 用途例を追加（画像付き）
+            # 用途例を追加（画像付き、get-or-create）
             from utils.use_example_image_generator import ensure_use_example_image
             use1_img = ensure_use_example_image("ステンレス鋼", "調理台/流し台", "キッチン")
             
-            db.add(UseExample(
-                material_id=material5.id,
-                example_name="調理台/流し台",
+            get_or_create_use_example(
+                db,
+                material5.id,
+                "調理台/流し台",
                 domain="キッチン",
                 description="キッチン設備として使用。耐食性と清潔性に優れる。",
                 image_path=use1_img or "",
                 source_name="Generated",
                 source_url="",
                 license_note="自前生成"
-            ))
+            )
             
             materials_data.append(material5)
-            print(f"    ✓ ステンレス鋼 SUS304 (ID: {material5.id})")
-            existing_names.add("ステンレス鋼 SUS304")
-            existing_names.add("ステンレス鋼 SUS304")
-        
-        # 6. 真鍮（黄銅）（重複チェック）
-        if "真鍮（黄銅）" in existing_names:
-            print("  ⏭️  スキップ: 真鍮（黄銅）（既に登録されています）")
-            material6 = None
         else:
-            print("  6. 真鍮（黄銅）を登録中...")
-            material6 = Material(
-            uuid=str(uuid.uuid4()),
+            print(f"  ⏭️  スキップ: ステンレス鋼 SUS304 (ID: {material5.id})（既に登録されています）")
+            stats["skipped"] += 1
+        
+        # 6. 真鍮（黄銅）（get-or-createパターン）
+        material6, created = get_or_create_material(
+            db,
             name_official="真鍮（黄銅）",
+            name="真鍮（黄銅）",
+            uuid=str(uuid.uuid4()),
             name_aliases=json.dumps(["ブラス", "C2600", "黄銅"], ensure_ascii=False),
             supplier_org="一般流通",
             supplier_type="企業",
@@ -367,55 +381,57 @@ def init_sample_data():
             cost_level="中",
             safety_tags=json.dumps(["皮膚接触OK"], ensure_ascii=False),
             visibility="公開（誰でも閲覧可）",
-            name="真鍮（黄銅）",
             category="金属・合金",
             description="銅と亜鉛の合金。美しい黄金色と優れた加工性を持つ。JIS H 3100準拠。"
         )
-            db.add(material6)
+        
+        if created:
             db.flush()
+            print(f"  ✓ 作成: 真鍮（黄銅） (ID: {material6.id})")
+            stats["created"] += 1
             
-            db.add(Property(material_id=material6.id, property_name="密度", value=8.53, unit="g/cm³"))
-            db.add(Property(material_id=material6.id, property_name="引張強度", value=350, unit="MPa"))
-            db.add(Property(material_id=material6.id, property_name="降伏強度", value=100, unit="MPa"))
-            db.add(Property(material_id=material6.id, property_name="融点", value=900, unit="°C"))
-            db.add(Property(material_id=material6.id, property_name="熱伝導率", value=120, unit="W/(m·K)"))
-            db.add(Property(material_id=material6.id, property_name="JIS規格", value=None, unit="JIS H 3100"))
-            db.add(Property(material_id=material6.id, property_name="主成分", value=None, unit="Cu 70%, Zn 30%"))
+            # 物性データを追加（get-or-create）
+            get_or_create_property(db, material6.id, "密度", value=8.53, unit="g/cm³")
+            get_or_create_property(db, material6.id, "引張強度", value=350, unit="MPa")
+            get_or_create_property(db, material6.id, "降伏強度", value=100, unit="MPa")
+            get_or_create_property(db, material6.id, "融点", value=900, unit="°C")
+            get_or_create_property(db, material6.id, "熱伝導率", value=120, unit="W/(m·K)")
+            get_or_create_property(db, material6.id, "JIS規格", value=None, unit="JIS H 3100")
+            get_or_create_property(db, material6.id, "主成分", value=None, unit="Cu 70%, Zn 30%")
             
+            # 画像生成
             ensure_material_image("真鍮", "金属・合金", material6.id, db)
             
-            # 用途例を追加（画像付き）
+            # 用途例を追加（画像付き、get-or-create）
             from utils.use_example_image_generator import ensure_use_example_image
             use1_img = ensure_use_example_image("真鍮", "ドアノブ/金物", "内装")
             
-            db.add(UseExample(
-                material_id=material6.id,
-                example_name="ドアノブ/金物",
+            get_or_create_use_example(
+                db,
+                material6.id,
+                "ドアノブ/金物",
                 domain="内装",
                 description="内装金物として使用。美しい黄金色と優れた加工性。",
                 image_path=use1_img or "",
                 source_name="Generated",
                 source_url="",
                 license_note="自前生成"
-            ))
+            )
             
             materials_data.append(material6)
-            print(f"    ✓ 真鍮（黄銅） (ID: {material6.id})")
-            existing_names.add("真鍮（黄銅）")
-            existing_names.add("真鍮（黄銅）")
+        else:
+            print(f"  ⏭️  スキップ: 真鍮（黄銅） (ID: {material6.id})（既に登録されています）")
+            stats["skipped"] += 1
         
         # ========== プラスチック ==========
         print("\n【プラスチック】")
         
-        # 7. ポリプロピレン（PP）（重複チェック）
-        if "ポリプロピレン（PP）" in existing_names:
-            print("  ⏭️  スキップ: ポリプロピレン（PP）（既に登録されています）")
-            material7 = None
-        else:
-            print("  7. ポリプロピレン（PP）を登録中...")
-            material7 = Material(
-            uuid=str(uuid.uuid4()),
+        # 7. ポリプロピレン（PP）（get-or-createパターン）
+        material7, created = get_or_create_material(
+            db,
             name_official="ポリプロピレン（PP）",
+            name="ポリプロピレン（PP）",
+            uuid=str(uuid.uuid4()),
             name_aliases=json.dumps(["PP", "ポリプロ", "ポリプロピレン樹脂"], ensure_ascii=False),
             supplier_org="一般流通",
             supplier_type="企業",
@@ -441,62 +457,65 @@ def init_sample_data():
             cost_level="低",
             safety_tags=json.dumps(["食品接触OK", "皮膚接触OK"], ensure_ascii=False),
             visibility="公開（誰でも閲覧可）",
-            name="ポリプロピレン（PP）",
             category="高分子（樹脂・エラストマー等）",
             description="ポリプロピレン樹脂。軽量で耐薬品性に優れ、食品容器などに広く使用される。JIS K 6922準拠。"
         )
-            db.add(material7)
+        
+        if created:
             db.flush()
+            print(f"  ✓ 作成: ポリプロピレン（PP） (ID: {material7.id})")
+            stats["created"] += 1
             
-            db.add(Property(material_id=material7.id, property_name="密度", value=0.90, unit="g/cm³"))
-            db.add(Property(material_id=material7.id, property_name="引張強度", value=35, unit="MPa"))
-            db.add(Property(material_id=material7.id, property_name="降伏強度", value=30, unit="MPa"))
-            db.add(Property(material_id=material7.id, property_name="融点", value=165, unit="°C"))
-            db.add(Property(material_id=material7.id, property_name="ガラス転移温度", value=-10, unit="°C"))
-            db.add(Property(material_id=material7.id, property_name="JIS規格", value=None, unit="JIS K 6922"))
+            # 物性データを追加（get-or-create）
+            get_or_create_property(db, material7.id, "密度", value=0.90, unit="g/cm³")
+            get_or_create_property(db, material7.id, "引張強度", value=35, unit="MPa")
+            get_or_create_property(db, material7.id, "降伏強度", value=30, unit="MPa")
+            get_or_create_property(db, material7.id, "融点", value=165, unit="°C")
+            get_or_create_property(db, material7.id, "ガラス転移温度", value=-10, unit="°C")
+            get_or_create_property(db, material7.id, "JIS規格", value=None, unit="JIS K 6922")
             
+            # 画像生成
             ensure_material_image("ポリプロピレン", "高分子（樹脂・エラストマー等）", material7.id, db)
             
-            # 用途例を追加（画像付き）
+            # 用途例を追加（画像付き、get-or-create）
             from utils.use_example_image_generator import ensure_use_example_image
             use1_img = ensure_use_example_image("ポリプロピレン", "収納ケース", "生活")
             use2_img = ensure_use_example_image("ポリプロピレン", "配管", "建築")
             
-            db.add(UseExample(
-                material_id=material7.id,
-                example_name="収納ケース",
+            get_or_create_use_example(
+                db,
+                material7.id,
+                "収納ケース",
                 domain="生活",
                 description="生活用品として使用。軽量で耐薬品性に優れる。",
                 image_path=use1_img or "",
                 source_name="Generated",
                 source_url="",
                 license_note="自前生成"
-            ))
-            db.add(UseExample(
-                material_id=material7.id,
-                example_name="配管",
+            )
+            get_or_create_use_example(
+                db,
+                material7.id,
+                "配管",
                 domain="建築",
                 description="建築配管材として使用。耐薬品性と軽量性。",
                 image_path=use2_img or "",
                 source_name="Generated",
                 source_url="",
                 license_note="自前生成"
-            ))
+            )
             
             materials_data.append(material7)
-            print(f"    ✓ ポリプロピレン（PP） (ID: {material7.id})")
-            existing_names.add("ポリプロピレン（PP）")
-            existing_names.add("ポリプロピレン（PP）")
-        
-        # 8. ポリエチレン（PE）（重複チェック）
-        if "ポリエチレン（PE）" in existing_names:
-            print("  ⏭️  スキップ: ポリエチレン（PE）（既に登録されています）")
-            material8 = None
         else:
-            print("  8. ポリエチレン（PE）を登録中...")
-            material8 = Material(
-            uuid=str(uuid.uuid4()),
+            print(f"  ⏭️  スキップ: ポリプロピレン（PP） (ID: {material7.id})（既に登録されています）")
+            stats["skipped"] += 1
+        
+        # 8. ポリエチレン（PE）（get-or-createパターン）
+        material8, created = get_or_create_material(
+            db,
             name_official="ポリエチレン（PE）",
+            name="ポリエチレン（PE）",
+            uuid=str(uuid.uuid4()),
             name_aliases=json.dumps(["PE", "ポリエチレン樹脂"], ensure_ascii=False),
             supplier_org="一般流通",
             supplier_type="企業",
@@ -522,51 +541,53 @@ def init_sample_data():
             cost_level="低",
             safety_tags=json.dumps(["食品接触OK", "皮膚接触OK"], ensure_ascii=False),
             visibility="公開（誰でも閲覧可）",
-            name="ポリエチレン（PE）",
             category="高分子（樹脂・エラストマー等）",
             description="ポリエチレン樹脂。最も一般的な熱可塑性樹脂。優れた化学的安定性と電気絶縁性を持つ。JIS K 6760準拠。"
         )
-            db.add(material8)
+        
+        if created:
             db.flush()
+            print(f"  ✓ 作成: ポリエチレン（PE） (ID: {material8.id})")
+            stats["created"] += 1
             
-            db.add(Property(material_id=material8.id, property_name="密度", value=0.92, unit="g/cm³"))
-            db.add(Property(material_id=material8.id, property_name="引張強度", value=20, unit="MPa"))
-            db.add(Property(material_id=material8.id, property_name="降伏強度", value=15, unit="MPa"))
-            db.add(Property(material_id=material8.id, property_name="融点", value=130, unit="°C"))
-            db.add(Property(material_id=material8.id, property_name="ガラス転移温度", value=-120, unit="°C"))
-            db.add(Property(material_id=material8.id, property_name="JIS規格", value=None, unit="JIS K 6760"))
+            # 物性データを追加（get-or-create）
+            get_or_create_property(db, material8.id, "密度", value=0.92, unit="g/cm³")
+            get_or_create_property(db, material8.id, "引張強度", value=20, unit="MPa")
+            get_or_create_property(db, material8.id, "降伏強度", value=15, unit="MPa")
+            get_or_create_property(db, material8.id, "融点", value=130, unit="°C")
+            get_or_create_property(db, material8.id, "ガラス転移温度", value=-120, unit="°C")
+            get_or_create_property(db, material8.id, "JIS規格", value=None, unit="JIS K 6760")
             
+            # 画像生成
             ensure_material_image("ポリエチレン", "高分子（樹脂・エラストマー等）", material8.id, db)
             
-            # 用途例を追加（画像付き）
+            # 用途例を追加（画像付き、get-or-create）
             from utils.use_example_image_generator import ensure_use_example_image
             use1_img = ensure_use_example_image("ポリエチレン", "シート/包装材", "生活")
             
-            db.add(UseExample(
-                material_id=material8.id,
-                example_name="シート/包装材",
+            get_or_create_use_example(
+                db,
+                material8.id,
+                "シート/包装材",
                 domain="生活",
                 description="包装材として広く使用される。柔軟性と化学的安定性。",
                 image_path=use1_img or "",
                 source_name="Generated",
                 source_url="",
                 license_note="自前生成"
-            ))
+            )
             
             materials_data.append(material8)
-            print(f"    ✓ ポリエチレン（PE） (ID: {material8.id})")
-            existing_names.add("ポリエチレン（PE）")
-            existing_names.add("ポリエチレン（PE）")
-        
-        # 9. ポリ塩化ビニル（PVC）（重複チェック）
-        if "ポリ塩化ビニル（PVC）" in existing_names:
-            print("  ⏭️  スキップ: ポリ塩化ビニル（PVC）（既に登録されています）")
-            material9 = None
         else:
-            print("  9. ポリ塩化ビニル（PVC）を登録中...")
-            material9 = Material(
-            uuid=str(uuid.uuid4()),
+            print(f"  ⏭️  スキップ: ポリエチレン（PE） (ID: {material8.id})（既に登録されています）")
+            stats["skipped"] += 1
+        
+        # 9. ポリ塩化ビニル（PVC）（get-or-createパターン）
+        material9, created = get_or_create_material(
+            db,
             name_official="ポリ塩化ビニル（PVC）",
+            name="ポリ塩化ビニル（PVC）",
+            uuid=str(uuid.uuid4()),
             name_aliases=json.dumps(["PVC", "塩ビ", "ポリ塩化ビニル樹脂"], ensure_ascii=False),
             supplier_org="一般流通",
             supplier_type="企業",
@@ -593,51 +614,61 @@ def init_sample_data():
             safety_tags=json.dumps(["皮膚接触OK"], ensure_ascii=False),
             restrictions="高温での使用は避ける。食品接触用途では食品衛生法に準拠したグレードを使用。",
             visibility="公開（誰でも閲覧可）",
-            name="ポリ塩化ビニル（PVC）",
             category="高分子（樹脂・エラストマー等）",
             description="ポリ塩化ビニル樹脂。硬質と軟質があり、建築材料やパイプなどに広く使用される。JIS K 6723準拠。"
         )
-            db.add(material9)
+        
+        if created:
             db.flush()
+            print(f"  ✓ 作成: ポリ塩化ビニル（PVC） (ID: {material9.id})")
+            stats["created"] += 1
             
-            db.add(Property(material_id=material9.id, property_name="密度", value=1.38, unit="g/cm³"))
-            db.add(Property(material_id=material9.id, property_name="引張強度", value=50, unit="MPa"))
-            db.add(Property(material_id=material9.id, property_name="降伏強度", value=45, unit="MPa"))
-            db.add(Property(material_id=material9.id, property_name="ガラス転移温度", value=87, unit="°C"))
-            db.add(Property(material_id=material9.id, property_name="JIS規格", value=None, unit="JIS K 6723"))
+            # 物性データを追加（get-or-create）
+            get_or_create_property(db, material9.id, "密度", value=1.38, unit="g/cm³")
+            get_or_create_property(db, material9.id, "引張強度", value=50, unit="MPa")
+            get_or_create_property(db, material9.id, "降伏強度", value=45, unit="MPa")
+            get_or_create_property(db, material9.id, "ガラス転移温度", value=87, unit="°C")
+            get_or_create_property(db, material9.id, "JIS規格", value=None, unit="JIS K 6723")
             
+            # 画像生成
             ensure_material_image("ポリ塩化ビニル", "高分子（樹脂・エラストマー等）", material9.id, db)
             
-            # 用途例を追加（画像付き）
+            # 用途例を追加（画像付き、get-or-create）
             from utils.use_example_image_generator import ensure_use_example_image
             use1_img = ensure_use_example_image("ポリ塩化ビニル", "シート/内装材", "建築")
             
-            db.add(UseExample(
-                material_id=material9.id,
-                example_name="シート/内装材",
+            get_or_create_use_example(
+                db,
+                material9.id,
+                "シート/内装材",
                 domain="建築",
                 description="建築内装材として使用。耐候性と加工性に優れる。",
                 image_path=use1_img or "",
                 source_name="Generated",
                 source_url="",
                 license_note="自前生成"
-            ))
+            )
             
             materials_data.append(material9)
-            print(f"    ✓ ポリ塩化ビニル（PVC） (ID: {material9.id})")
-            existing_names.add("ポリ塩化ビニル（PVC）")
+        else:
+            print(f"  ⏭️  スキップ: ポリ塩化ビニル（PVC） (ID: {material9.id})（既に登録されています）")
+            stats["skipped"] += 1
         
         db.commit()
         print("\n" + "=" * 60)
         print("✅ サンプルデータの追加が完了しました！")
         print("=" * 60)
+        print(f"\n📊 処理結果:")
+        print(f"  ✅ 作成: {stats['created']}件")
+        print(f"  ⏭️  スキップ: {stats['skipped']}件")
+        print(f"  📝 更新: {stats['updated']}件")
         print(f"\n📊 登録された材料一覧:\n")
         for i, mat in enumerate(materials_data, 1):
             print(f"  {i}. {mat.name_official}")
             print(f"     カテゴリ: {mat.category_main}")
             print(f"     ID: {mat.id}, UUID: {mat.uuid[:8]}...")
             print()
-        print(f"合計 {len(materials_data)} 件の材料を登録しました。")
+        print(f"合計 {len(materials_data)} 件の材料を処理しました。")
         print("=" * 60)
         
     except Exception as e:
