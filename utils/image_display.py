@@ -38,27 +38,37 @@ def get_display_image_source(
     url = None
     file_path = None
     
-    # オブジェクトの種類に応じてURL/パスを取得
-    if hasattr(image_record, 'url') and image_record.url:
-        url = image_record.url
-    elif hasattr(image_record, 'image_url') and image_record.image_url:
-        url = image_record.image_url
-    elif hasattr(image_record, 'texture_image_url') and image_record.texture_image_url:
-        url = image_record.texture_image_url
+    # オブジェクトの種類に応じてURL/パスを取得（例外時もアプリは落ちない）
+    try:
+        if hasattr(image_record, 'url') and image_record.url:
+            url = image_record.url
+        elif hasattr(image_record, 'image_url') and image_record.image_url:
+            url = image_record.image_url
+        elif hasattr(image_record, 'texture_image_url') and image_record.texture_image_url:
+            url = image_record.texture_image_url
+    except Exception:
+        # 例外時はurlをNoneのまま続行（アプリは落ちない）
+        url = None
     
     # URLがある場合はそれを返す
     if url:
         return url
     
-    # ローカルパスを取得
-    if hasattr(image_record, 'file_path') and image_record.file_path:
-        file_path = image_record.file_path
-    elif hasattr(image_record, 'image_path') and image_record.image_path:
-        file_path = image_record.image_path
-    elif hasattr(image_record, 'texture_image_path') and image_record.texture_image_path:
-        file_path = image_record.texture_image_path
+    # ローカルパスを取得（例外時もアプリは落ちない）
+    try:
+        if hasattr(image_record, 'file_path') and image_record.file_path:
+            file_path = image_record.file_path
+        elif hasattr(image_record, 'image_path') and image_record.image_path:
+            file_path = image_record.image_path
+        elif hasattr(image_record, 'texture_image_path') and image_record.texture_image_path:
+            file_path = image_record.texture_image_path
+        else:
+            file_path = None
+    except Exception:
+        # 例外時はfile_pathをNoneのまま続行（アプリは落ちない）
+        file_path = None
     
-    # ローカルパスがある場合は画像を読み込んで返す
+    # ローカルパスがある場合は画像を読み込んで返す（例外時もアプリは落ちない）
     if file_path:
         try:
             # パスを解決
@@ -80,8 +90,8 @@ def get_display_image_source(
                     else:
                         pil_img = pil_img.convert('RGB')
                 return pil_img
-        except Exception as e:
-            # 読み込みエラーは無視してNoneを返す
+        except Exception:
+            # 読み込みエラーは無視してNoneを返す（アプリは落ちない）
             pass
     
     return None
@@ -127,7 +137,14 @@ def display_image_unified(
             fill=(150, 150, 150),
             font=font
         )
-        st.image(placeholder, caption=caption or "プレースホルダー", width=width, use_container_width=use_container_width)
+            try:
+                st.image(placeholder, caption=caption or "プレースホルダー", width=width, use_container_width=use_container_width)
+            except Exception:
+                # プレースホルダー表示も失敗した場合は何も表示しない（アプリは落ちない）
+                pass
+    except Exception:
+        # 全体の例外時もアプリは落ちない（画像だけスキップ）
+        pass
 
 
 def get_material_image(

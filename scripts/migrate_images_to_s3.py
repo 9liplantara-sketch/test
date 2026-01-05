@@ -86,9 +86,9 @@ def migrate_image_records(
         "errors": []
     }
     
-    # urlが空で、file_pathが存在するレコードを取得
+    # urlが空で、file_pathが存在するレコードを取得（idempotent: 既にurlがあるものはスキップ）
     images = db.query(Image).filter(
-        (Image.url == None) | (Image.url == ""),
+        ((Image.url == None) | (Image.url == "")),
         Image.file_path != None,
         Image.file_path != ""
     ).all()
@@ -127,6 +127,12 @@ def migrate_image_records(
             # S3キーを構築
             s3_key = build_s3_key(image.material_id, image_type, image.file_path)
             
+            # idempotent: 既にURLが設定されている場合はスキップ
+            if image.url and image.url.strip():
+                results["skipped"] += 1
+                print(f"[{idx}/{len(images)}] ⏭️  スキップ: {image.file_path} (既にURLが設定されています)")
+                continue
+            
             if dry_run:
                 print(f"[{idx}/{len(images)}] 🔍 ドライラン: {image.file_path} -> {s3_key}")
                 results["migrated"] += 1
@@ -139,13 +145,18 @@ def migrate_image_records(
                         make_public=True
                     )
                     
-                    # DBにURLを保存
-                    image.url = public_url
-                    db.commit()
-                    
-                    print(f"[{idx}/{len(images)}] ✅ 移行成功: {image.file_path} -> {public_url}")
-                    results["migrated"] += 1
+                    # DBにURLを保存（idempotent: 既にURLがあっても上書きしない）
+                    if not image.url or not image.url.strip():
+                        image.url = public_url
+                        db.commit()
+                        print(f"[{idx}/{len(images)}] ✅ 移行成功: {image.file_path} -> {public_url}")
+                        results["migrated"] += 1
+                    else:
+                        # 既にURLがある場合はスキップ（idempotent）
+                        results["skipped"] += 1
+                        print(f"[{idx}/{len(images)}] ⏭️  スキップ: {image.file_path} (既にURLが設定されています)")
                 except Exception as e:
+                    # 例外時もアプリは落ちない（画像だけスキップ）
                     results["failed"] += 1
                     error_msg = f"S3アップロードエラー: {str(e)}"
                     results["errors"].append({
@@ -157,18 +168,25 @@ def migrate_image_records(
                     })
                     print(f"[{idx}/{len(images)}] ❌ 失敗: {error_msg}")
                     db.rollback()
+                    # 例外をキャッチして続行（アプリは落ちない）
         
         except Exception as e:
+            # 例外時もアプリは落ちない（画像だけスキップ）
             results["failed"] += 1
             error_msg = f"予期しないエラー: {str(e)}"
             results["errors"].append({
                 "type": "Image",
-                "id": image.id,
+                "id": getattr(image, 'id', None),
                 "material_id": getattr(image, 'material_id', None),
                 "file_path": getattr(image, 'file_path', None),
                 "error": error_msg
             })
             print(f"[{idx}/{len(images)}] ❌ エラー: {error_msg}")
+            # 例外をキャッチして続行（アプリは落ちない）
+            try:
+                db.rollback()
+            except:
+                pass
     
     return results
 
@@ -197,7 +215,7 @@ def migrate_texture_images(
         "errors": []
     }
     
-    # texture_image_urlが空で、texture_image_pathが存在するレコードを取得
+    # texture_image_urlが空で、texture_image_pathが存在するレコードを取得（idempotent）
     materials = db.query(Material).filter(
         ((Material.texture_image_url == None) | (Material.texture_image_url == "")),
         Material.texture_image_path != None,
@@ -234,6 +252,12 @@ def migrate_texture_images(
             # S3キーを構築
             s3_key = build_s3_key(material.id, "textures", material.texture_image_path)
             
+            # idempotent: 既にURLが設定されている場合はスキップ
+            if material.texture_image_url and material.texture_image_url.strip():
+                results["skipped"] += 1
+                print(f"[{idx}/{len(materials)}] ⏭️  スキップ: {material.texture_image_path} (既にURLが設定されています)")
+                continue
+            
             if dry_run:
                 print(f"[{idx}/{len(materials)}] 🔍 ドライラン: {material.texture_image_path} -> {s3_key}")
                 results["migrated"] += 1
@@ -246,13 +270,17 @@ def migrate_texture_images(
                         make_public=True
                     )
                     
-                    # DBにURLを保存
-                    material.texture_image_url = public_url
-                    db.commit()
-                    
-                    print(f"[{idx}/{len(materials)}] ✅ 移行成功: {material.texture_image_path} -> {public_url}")
-                    results["migrated"] += 1
+                    # DBにURLを保存（idempotent: 既にURLがあっても上書きしない）
+                    if not material.texture_image_url or not material.texture_image_url.strip():
+                        material.texture_image_url = public_url
+                        db.commit()
+                        print(f"[{idx}/{len(materials)}] ✅ 移行成功: {material.texture_image_path} -> {public_url}")
+                        results["migrated"] += 1
+                    else:
+                        results["skipped"] += 1
+                        print(f"[{idx}/{len(materials)}] ⏭️  スキップ: {material.texture_image_path} (既にURLが設定されています)")
                 except Exception as e:
+                    # 例外時もアプリは落ちない（画像だけスキップ）
                     results["failed"] += 1
                     error_msg = f"S3アップロードエラー: {str(e)}"
                     results["errors"].append({
@@ -263,8 +291,10 @@ def migrate_texture_images(
                     })
                     print(f"[{idx}/{len(materials)}] ❌ 失敗: {error_msg}")
                     db.rollback()
+                    # 例外をキャッチして続行（アプリは落ちない）
         
         except Exception as e:
+            # 例外時もアプリは落ちない（画像だけスキップ）
             results["failed"] += 1
             error_msg = f"予期しないエラー: {str(e)}"
             results["errors"].append({
@@ -274,6 +304,11 @@ def migrate_texture_images(
                 "error": error_msg
             })
             print(f"[{idx}/{len(materials)}] ❌ エラー: {error_msg}")
+            # 例外をキャッチして続行（アプリは落ちない）
+            try:
+                db.rollback()
+            except:
+                pass
     
     return results
 
