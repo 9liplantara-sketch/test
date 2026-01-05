@@ -146,3 +146,4 @@ def get_process_example_image(process_name: str, output_dir: str = "static/proce
         traceback.print_exc()
         return None
 
+

@@ -144,3 +144,4 @@ normalized = normalize_image_path(file_path, project_root)
 2. **画像キャッシュ**: 健康状態チェック結果をキャッシュしてパフォーマンス向上
 3. **バッチ再生成**: 診断モードから一括再生成機能を追加可能
 
+

@@ -89,8 +89,32 @@ class Material(MaterialBase):
         from_attributes = True
 
 
+class PropertyDTO(BaseModel):
+    """物性データDTO"""
+    property_name: str
+    value: Optional[float] = None
+    unit: Optional[str] = None
+    measurement_condition: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
+class MaterialCardPayload(BaseModel):
+    """素材カード用のDTO（表示用データクラス）"""
+    id: int
+    name: str
+    name_official: Optional[str] = None
+    category: Optional[str] = None
+    category_main: Optional[str] = None
+    description: Optional[str] = None
+    properties: List[PropertyDTO] = []
+    primary_image_path: Optional[str] = None
+    primary_image_type: Optional[str] = None
+    primary_image_description: Optional[str] = None
+
+
 class MaterialCard(BaseModel):
-    """素材カード用のデータモデル"""
-    material: Material
-    primary_image: Optional[Image] = None
+    """素材カード用のデータモデル（DTOを受け取る）"""
+    payload: MaterialCardPayload
 

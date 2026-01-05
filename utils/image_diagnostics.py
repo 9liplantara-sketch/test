@@ -166,3 +166,4 @@ def show_image_diagnostics(materials: List[Material], project_root: Path = None)
         "issues": issues,
     }
 
+

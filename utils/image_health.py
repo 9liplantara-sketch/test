@@ -182,3 +182,4 @@ def resolve_image_path(file_path: str, project_root: Optional[Path] = None) -> P
     # 相対パスの場合、プロジェクトルートからの相対パスとして解決
     return project_root / path
 
+

@@ -1,7 +1,7 @@
 """
 データベース設定とモデル定義（詳細仕様対応版）
 """
-from sqlalchemy import create_engine, Column, Integer, String, Float, Text, DateTime, ForeignKey, Boolean
+from sqlalchemy import create_engine, Column, Integer, String, Float, Text, DateTime, ForeignKey, Boolean, UniqueConstraint, Index
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
 from datetime import datetime
@@ -143,6 +143,10 @@ class Material(Base):
 class Property(Base):
     """物性テーブル"""
     __tablename__ = "properties"
+    __table_args__ = (
+        # material_id + property_nameを一意制約に（同じ材料に同じ物性を重複登録しない）
+        UniqueConstraint('material_id', 'property_name', name='uq_property_material_name'),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     material_id = Column(Integer, ForeignKey("materials.id"), nullable=False)
@@ -173,6 +177,10 @@ class Image(Base):
 class MaterialMetadata(Base):
     """メタデータテーブル"""
     __tablename__ = "material_metadata"
+    __table_args__ = (
+        # material_id + keyを一意制約に（同じ材料に同じキーのメタデータを重複登録しない）
+        UniqueConstraint('material_id', 'key', name='uq_metadata_material_key'),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     material_id = Column(Integer, ForeignKey("materials.id"), nullable=False)
@@ -200,6 +208,10 @@ class ReferenceURL(Base):
 class UseExample(Base):
     """代表的使用例テーブル（用途写真対応）"""
     __tablename__ = "use_examples"
+    __table_args__ = (
+        # material_id + example_nameを一意制約に（同じ材料に同じ用途例を重複登録しない）
+        UniqueConstraint('material_id', 'example_name', name='uq_use_example_material_name'),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     material_id = Column(Integer, ForeignKey("materials.id"), nullable=False)
@@ -248,7 +260,15 @@ def init_db():
     - Image.file_path を nullable に変更（既存データは保持）
     - ProcessExampleImage.image_path を nullable に変更（既存データは保持）
     
+    一意制約の追加（重複投入を防ぐ）:
+    - Material.name_official を一意制約に
+    - Property (material_id, property_name) を一意制約に
+    - UseExample (material_id, example_name) を一意制約に
+    - MaterialMetadata (material_id, key) を一意制約に
+    
     注意: 既存の file_path / image_path カラムは削除せず保持（後方互換性）
+    注意: 一意制約は既存テーブルに追加できない場合がある（SQLite制限）ため、
+          アプリ側のロジックでも二重ガードを実装
     """
     Base.metadata.create_all(bind=engine)
     
@@ -256,6 +276,53 @@ def init_db():
     try:
         from sqlalchemy import inspect, text
         inspector = inspect(engine)
+        
+        # 一意制約の追加（既存テーブルに追加を試みる、失敗しても続行）
+        # SQLiteでは既存テーブルへの一意制約追加が難しいため、エラーは無視
+        try:
+            if 'materials' in inspector.get_table_names():
+                existing_indexes = [idx['name'] for idx in inspector.get_indexes('materials')]
+                if 'uq_material_name_official' not in existing_indexes:
+                    # 一意インデックスを作成（SQLiteでは制約として機能）
+                    with engine.connect() as conn:
+                        try:
+                            conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_material_name_official ON materials(name_official)"))
+                            conn.commit()
+                        except Exception:
+                            pass  # 既に存在するか、制約追加が失敗した場合は無視
+            
+            if 'properties' in inspector.get_table_names():
+                existing_indexes = [idx['name'] for idx in inspector.get_indexes('properties')]
+                if 'uq_property_material_name' not in existing_indexes:
+                    with engine.connect() as conn:
+                        try:
+                            conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_property_material_name ON properties(material_id, property_name)"))
+                            conn.commit()
+                        except Exception:
+                            pass
+            
+            if 'use_examples' in inspector.get_table_names():
+                existing_indexes = [idx['name'] for idx in inspector.get_indexes('use_examples')]
+                if 'uq_use_example_material_name' not in existing_indexes:
+                    with engine.connect() as conn:
+                        try:
+                            conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_use_example_material_name ON use_examples(material_id, example_name)"))
+                            conn.commit()
+                        except Exception:
+                            pass
+            
+            if 'material_metadata' in inspector.get_table_names():
+                existing_indexes = [idx['name'] for idx in inspector.get_indexes('material_metadata')]
+                if 'uq_metadata_material_key' not in existing_indexes:
+                    with engine.connect() as conn:
+                        try:
+                            conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_metadata_material_key ON material_metadata(material_id, key)"))
+                            conn.commit()
+                        except Exception:
+                            pass
+        except Exception as e:
+            # 一意制約の追加に失敗しても続行（アプリ側のロジックで二重ガード）
+            print(f"一意制約の追加をスキップしました（既存テーブルの場合、SQLite制限により追加できない場合があります）: {e}")
         
         # materials テーブルのカラム確認
         if 'materials' in inspector.get_table_names():

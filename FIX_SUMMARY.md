@@ -158,3 +158,4 @@ icon = get_icon_svg_inline("icon-register", 40, "#999999")  # SVGファイルか
    - 必要に応じて、さらに多くのアイコンを追加可能
    - iconmonstrの公式アイコンを直接使用することも検討可能（ライセンス確認後）
 
+

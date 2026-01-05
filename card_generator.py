@@ -365,8 +365,8 @@ def generate_material_card(card_data: MaterialCard) -> str:
                     <h3>📊 主要物性</h3>
                     {''.join([f'''
                     <div class="property-item">
-                        <span class="property-name">{prop.property_name}</span>
-                        <span class="property-value">{prop.value if prop.value is not None else 'N/A'} {prop.unit or ''}</span>
+                        <span class="property-name">{prop.property_name if hasattr(prop, 'property_name') else '不明'}</span>
+                        <span class="property-value">{prop.value if hasattr(prop, 'value') and prop.value is not None else 'N/A'} {prop.unit if hasattr(prop, 'unit') and prop.unit else ''}</span>
                     </div>
                     ''' for prop in main_properties]) if main_properties else '<p style="color: #999; text-align: center; padding: 20px;">物性データが登録されていません</p>'}
                 </div>

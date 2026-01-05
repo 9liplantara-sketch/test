@@ -207,17 +207,70 @@ async def get_material_card(material_id: int, db: Session = Depends(get_db)):
     if not material:
         raise HTTPException(status_code=404, detail="Material not found")
     
-    # 主要画像を取得
-    primary_image = None
-    if material.images:
-        primary_image = material.images[0]
+    # MaterialCard用のDTOを作成（ValidationErrorを防ぐ）
+    from models import MaterialCardPayload, PropertyDTO
     
-    card_data = MaterialCard(
-        material=material,
-        primary_image=primary_image
-    )
+    try:
+        # 主要画像を取得
+        primary_image = None
+        if material.images:
+            primary_image = material.images[0]
+        
+        primary_image_path = primary_image.file_path if primary_image else None
+        primary_image_type = primary_image.image_type if primary_image else None
+        primary_image_description = primary_image.description if primary_image else None
+        
+        # 物性データをDTOに変換
+        properties_dto = []
+        if hasattr(material, 'properties') and material.properties:
+            for prop in material.properties:
+                try:
+                    prop_dto = PropertyDTO(
+                        property_name=prop.property_name or "不明",
+                        value=prop.value,
+                        unit=prop.unit,
+                        measurement_condition=getattr(prop, 'measurement_condition', None)
+                    )
+                    properties_dto.append(prop_dto)
+                except Exception:
+                    continue
+        
+        # DTOを作成
+        card_payload = MaterialCardPayload(
+            id=material.id,
+            name=material.name or getattr(material, 'name_official', None) or "名称不明",
+            name_official=getattr(material, 'name_official', None),
+            category=material.category or getattr(material, 'category_main', None),
+            category_main=getattr(material, 'category_main', None),
+            description=material.description or None,
+            properties=properties_dto,
+            primary_image_path=primary_image_path,
+            primary_image_type=primary_image_type,
+            primary_image_description=primary_image_description
+        )
+        
+        card_data = MaterialCard(payload=card_payload)
+        card_html = generate_material_card(card_data)
+    except Exception as e:
+        # フォールバック：最低限の情報だけのカード
+        import traceback
+        traceback.print_exc()
+        material_name = material.name or getattr(material, 'name_official', None) or 'Unknown'
+        material_desc = material.description or 'No description'
+        card_html = f"""
+        <html>
+        <head>
+            <meta charset="utf-8">
+            <title>Material Card - {material_name}</title>
+        </head>
+        <body>
+            <h1>{material_name}</h1>
+            <p>ID: {material.id}</p>
+            <p>{material_desc}</p>
+        </body>
+        </html>
+        """
     
-    card_html = generate_material_card(card_data)
     return HTMLResponse(content=card_html)
 
 

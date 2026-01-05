@@ -94,3 +94,4 @@ def generate_qr_pil_image(data: str, box_size: int = 10, border: int = 5) -> Opt
         traceback.print_exc()
         return None
 
+
