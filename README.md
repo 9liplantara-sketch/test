@@ -158,6 +158,33 @@ public_url = upload_file_to_s3(
 
 詳細は `S3_SETUP.md` を参照してください。
 
+### 既存画像のS3移行
+
+既存のローカル画像をS3に移行するバッチスクリプトを用意しました：
+
+```bash
+# ドライラン（アップロードしないで対象数だけ表示）
+python scripts/migrate_images_to_s3.py --dry-run
+
+# テスト実行（10件のみ）
+python scripts/migrate_images_to_s3.py --limit 10
+
+# 本番実行（全件移行）
+python scripts/migrate_images_to_s3.py
+```
+
+**移行対象**:
+- `Image`テーブル: 材料の汎用画像
+- `Material.texture_image_path`: テクスチャ画像
+- `UseExample.image_path`: 用途写真
+- `ProcessExampleImage.image_path`: 加工例画像
+
+**S3キー設計**:
+- `materials/{material_id}/primary/{filename}` - 汎用画像
+- `materials/{material_id}/textures/{filename}` - テクスチャ画像
+- `materials/{material_id}/use_cases/{filename}` - 用途写真
+- `materials/{material_id}/process_examples/{filename}` - 加工例画像
+
 ## 画像生成機能
 
 ### 概要
