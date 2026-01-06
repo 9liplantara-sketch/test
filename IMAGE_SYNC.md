@@ -123,6 +123,8 @@ DBに存在しない材料名のファイルはスキップされます（`--no-
 1. **材料名の確認**: DBの `Material.name` または `Material.name_official` とファイル名が一致しているか確認
 2. **拡張子の確認**: `.jpg`, `.jpeg`, `.png`, `.webp` のいずれかであることを確認
 3. **ドライランで確認**: `--dry-run` オプションで実際に何が検出されるか確認
+4. **Git追跡の確認**: `static/images/materials/` がGitで追跡されているか確認（`git ls-files`）
+5. **Gitにプッシュ**: 同期後、`git add`, `git commit`, `git push` でCloudに反映
 
 ### 同名で複数の拡張子がある場合
 
@@ -137,6 +139,17 @@ DBに存在しない材料名のファイルはスキップされます（`--no-
 ### DB突合が失敗する場合
 
 `--no-db` オプションを使用すると、DB突合をスキップしてファイル名をそのまま使用します。
+
+### Streamlit Cloudで表示されない場合
+
+**重要**: `uploads/` は `.gitignore` で除外されているため、Cloudには届きません。
+
+1. **同期の確認**: `scripts/debug_image_state.py --compare-uploads` で差分を確認
+2. **Git追跡の確認**: `git ls-files static/images/materials/` で追跡状態を確認
+3. **Gitにプッシュ**: `git add static/images/materials/ && git commit && git push`
+4. **Cloud再起動**: Streamlit Cloudで「Manage app → Reboot」を実行（キャッシュクリア）
+
+詳細は [DEBUG_IMAGE.md](./DEBUG_IMAGE.md) を参照してください。
 
 ## アプリでの表示
 
