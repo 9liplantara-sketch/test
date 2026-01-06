@@ -28,18 +28,14 @@ from periodic_table_ui import show_periodic_table
 from material_detail_tabs import show_material_detail_tabs
 
 # Git SHA取得関数（ビルド情報表示用）
-import subprocess
-
 def get_git_sha() -> str:
-    """Gitの短縮SHAを取得（失敗時は'no-git'を返す）"""
     try:
-        sha = subprocess.check_output(
+        return subprocess.check_output(
             ["git", "rev-parse", "--short", "HEAD"],
-            stderr=subprocess.DEVNULL
-        ).decode("utf-8").strip()
-        return sha
-    except (subprocess.CalledProcessError, FileNotFoundError, Exception):
-        return "no-git"
+            stderr=subprocess.DEVNULL,
+        ).decode().strip()
+    except Exception:
+        return os.environ.get("GIT_SHA", "unknown")
 
 # クラウド環境でのポート設定
 if 'PORT' in os.environ:
@@ -1299,28 +1295,51 @@ def show_home():
                 col_img, col_info = st.columns([1, 3])
                 
                 with col_img:
-                    # サムネ画像を表示（URL優先の統一関数を使用）
-                    from utils.image_display import get_display_image_source, display_image_unified
+                    # サムネ画像を表示（統一構成対応）
+                    from utils.image_display import find_material_image_paths, display_image_unified
+                    from PIL import Image as PILImage
                     
-                    # 材料の主画像を取得（Imageテーブルから）
-                    image_source = None
-                    if material.images:
-                        image_source = get_display_image_source(material.images[0], Path.cwd())
+                    # 材料名から画像パスを探索
+                    material_name = material.name_official or material.name
+                    image_paths = find_material_image_paths(material_name, Path.cwd())
                     
-                    # サムネサイズで表示（プレースホルダー付き）
-                    if image_source:
-                        # URLの場合はそのまま、PILImageの場合はリサイズ
-                        if isinstance(image_source, str):
-                            # URLの場合はそのまま表示
-                            st.image(image_source, width=120, use_container_width=False)
-                        else:
-                            # PILImageの場合はリサイズ
+                    # primary画像を優先、なければ既存のImageテーブルから取得
+                    if image_paths['primary']:
+                        try:
+                            img = PILImage.open(image_paths['primary'])
+                            if img.mode != 'RGB':
+                                if img.mode in ('RGBA', 'LA', 'P'):
+                                    rgb_img = PILImage.new('RGB', img.size, (255, 255, 255))
+                                    if img.mode == 'RGBA':
+                                        rgb_img.paste(img, mask=img.split()[3])
+                                    elif img.mode == 'LA':
+                                        rgb_img.paste(img.convert('RGB'), mask=img.split()[1])
+                                    else:
+                                        rgb_img = img.convert('RGB')
+                                    img = rgb_img
+                                else:
+                                    img = img.convert('RGB')
                             thumb_size = (120, 120)
-                            image_source.thumbnail(thumb_size, PILImage.Resampling.LANCZOS)
-                            st.image(image_source, width=120, use_container_width=False)
+                            img.thumbnail(thumb_size, PILImage.Resampling.LANCZOS)
+                            st.image(img, width=120, use_container_width=False)
+                        except Exception:
+                            display_image_unified(None, width=120, placeholder_size=(120, 120))
                     else:
-                        # プレースホルダーを表示
-                        display_image_unified(None, width=120, placeholder_size=(120, 120))
+                        # フォールバック: 既存のImageテーブルから取得
+                        from utils.image_display import get_display_image_source
+                        image_source = None
+                        if material.images:
+                            image_source = get_display_image_source(material.images[0], Path.cwd())
+                        
+                        if image_source:
+                            if isinstance(image_source, str):
+                                st.image(image_source, width=120, use_container_width=False)
+                            else:
+                                thumb_size = (120, 120)
+                                image_source.thumbnail(thumb_size, PILImage.Resampling.LANCZOS)
+                                st.image(image_source, width=120, use_container_width=False)
+                        else:
+                            display_image_unified(None, width=120, placeholder_size=(120, 120))
                 
                 with col_info:
                     # 材料名
@@ -1447,11 +1466,49 @@ def show_materials_list():
                 material_name = material.name_official or material.name or "名称不明"
                 material_desc = material.description or ""
                 
-                # 素材画像を取得（主役として表示、URL優先）
-                from utils.image_display import get_display_image_source, display_image_unified
+                # 素材画像を取得（統一構成対応）
+                from utils.image_display import find_material_image_paths, get_display_image_source, display_image_unified
+                from PIL import Image as PILImage
+                import base64
+                from io import BytesIO
+                
+                # 材料名から画像パスを探索
+                image_paths = find_material_image_paths(material_name, Path.cwd())
+                
+                # primary画像を優先、なければ既存のImageテーブルから取得
                 image_source = None
-                if material.images:
+                if image_paths['primary']:
+                    try:
+                        img = PILImage.open(image_paths['primary'])
+                        if img.mode != 'RGB':
+                            if img.mode in ('RGBA', 'LA', 'P'):
+                                rgb_img = PILImage.new('RGB', img.size, (255, 255, 255))
+                                if img.mode == 'RGBA':
+                                    rgb_img.paste(img, mask=img.split()[3])
+                                elif img.mode == 'LA':
+                                    rgb_img.paste(img.convert('RGB'), mask=img.split()[1])
+                                else:
+                                    rgb_img = img.convert('RGB')
+                                img = rgb_img
+                            else:
+                                img = img.convert('RGB')
+                        # Base64エンコード
+                        buffer = BytesIO()
+                        img.save(buffer, format='PNG')
+                        img_base64 = base64.b64encode(buffer.getvalue()).decode()
+                        image_source = f"data:image/png;base64,{img_base64}"
+                    except Exception:
+                        pass
+                
+                # フォールバック: 既存のImageテーブルから取得
+                if not image_source and material.images:
                     image_source = get_display_image_source(material.images[0], Path.cwd())
+                    if isinstance(image_source, PILImage.Image):
+                        # PILImageの場合はBase64に変換
+                        buffer = BytesIO()
+                        image_source.save(buffer, format='PNG')
+                        img_base64 = base64.b64encode(buffer.getvalue()).decode()
+                        image_source = f"data:image/png;base64,{img_base64}"
                 
                 # 画像HTML（プレースホルダー含む）
                 if image_source:

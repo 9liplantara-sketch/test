@@ -180,3 +180,4 @@ python scripts/dedupe_materials.py --execute
 - ✅ 再起動しても材料数が増えない（seedの重複投入が防がれる）
 - ✅ 重複削除スクリプトで既存の重複を検出・削除できる
 
+

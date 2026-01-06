@@ -95,3 +95,4 @@ def generate_qr_pil_image(data: str, box_size: int = 10, border: int = 5) -> Opt
         return None
 
 
+

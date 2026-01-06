@@ -5,3 +5,4 @@ init_sample_data.pyをget-or-createパターンにリファクタリングする
 # このスクリプトは手動でinit_sample_data.pyをリファクタリングする際の参考用
 # 実際のリファクタリングは手動で行う
 
+

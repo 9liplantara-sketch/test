@@ -347,3 +347,4 @@ python scripts/migrate_images_to_s3.py --limit 5
 3. ブラウザの開発者ツールでエラーを確認
 4. `utils/s3_storage.py`の`test_s3_connection()`を実行して接続を確認
 
+

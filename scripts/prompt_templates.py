@@ -151,3 +151,4 @@ def get_process_slug(process_method: str) -> str:
     """加工方法のスラッグを生成"""
     return slugify(process_method) or "process"
 
+

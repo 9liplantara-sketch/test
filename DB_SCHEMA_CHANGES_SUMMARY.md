@@ -121,3 +121,4 @@ primary_image_url = get_image_url(
 3. ⏳ **既存の画像表示関数を`get_image_url()`経由に変更**
 4. ⏳ **S3アップロード機能の実装**
 
+

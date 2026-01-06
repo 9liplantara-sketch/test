@@ -344,6 +344,60 @@ def show_procurement_uses_tab(material):
     st.markdown("---")
     st.markdown("### 代表的な使用例（用途写真ギャラリー）")
     
+    # 統一構成の画像を優先表示
+    material_name = material.name_official or material.name
+    from utils.image_display import find_material_image_paths, display_image_unified
+    image_paths = find_material_image_paths(material_name, Path.cwd())
+    
+    # space/product画像がある場合は表示
+    if image_paths['space'] or image_paths['product']:
+        cols = st.columns(2)
+        with cols[0]:
+            if image_paths['space']:
+                try:
+                    from PIL import Image as PILImage
+                    img = PILImage.open(image_paths['space'])
+                    if img.mode != 'RGB':
+                        if img.mode in ('RGBA', 'LA', 'P'):
+                            rgb_img = PILImage.new('RGB', img.size, (255, 255, 255))
+                            if img.mode == 'RGBA':
+                                rgb_img.paste(img, mask=img.split()[3])
+                            elif img.mode == 'LA':
+                                rgb_img.paste(img.convert('RGB'), mask=img.split()[1])
+                            else:
+                                rgb_img = img.convert('RGB')
+                            img = rgb_img
+                        else:
+                            img = img.convert('RGB')
+                    st.image(img, caption="空間の使用例", use_container_width=True)
+                except Exception:
+                    display_image_unified(None, caption="空間の使用例")
+            else:
+                display_image_unified(None, caption="空間の使用例")
+        with cols[1]:
+            if image_paths['product']:
+                try:
+                    from PIL import Image as PILImage
+                    img = PILImage.open(image_paths['product'])
+                    if img.mode != 'RGB':
+                        if img.mode in ('RGBA', 'LA', 'P'):
+                            rgb_img = PILImage.new('RGB', img.size, (255, 255, 255))
+                            if img.mode == 'RGBA':
+                                rgb_img.paste(img, mask=img.split()[3])
+                            elif img.mode == 'LA':
+                                rgb_img.paste(img.convert('RGB'), mask=img.split()[1])
+                            else:
+                                rgb_img = img.convert('RGB')
+                            img = rgb_img
+                        else:
+                            img = img.convert('RGB')
+                    st.image(img, caption="プロダクトの使用例", use_container_width=True)
+                except Exception:
+                    display_image_unified(None, caption="プロダクトの使用例")
+            else:
+                display_image_unified(None, caption="プロダクトの使用例")
+    
+    # DBから取得したUseExampleも表示（フォールバック）
     try:
         # eager load済みのuse_examplesにアクセス
         use_examples_list = []

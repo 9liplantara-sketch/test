@@ -544,3 +544,4 @@ if __name__ == "__main__":
     else:
         generate_all_images(material_ids=args.material_ids, skip_existing=args.skip_existing)
 
+

@@ -145,3 +145,4 @@ normalized = normalize_image_path(file_path, project_root)
 3. **バッチ再生成**: 診断モードから一括再生成機能を追加可能
 
 
+

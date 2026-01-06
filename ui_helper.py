@@ -89,3 +89,4 @@ def resize_image_for_web(image_path, max_width=800, quality=85):
 
 
 
+

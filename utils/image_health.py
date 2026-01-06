@@ -183,3 +183,4 @@ def resolve_image_path(file_path: str, project_root: Optional[Path] = None) -> P
     return project_root / path
 
 
+
