@@ -1210,35 +1210,35 @@ def render_debug_sidebar_early():
                     # 絶対パス固定（相対パス事故を潰す）
                     db_path = Path(__file__).parent / "materials.db"
                     st.write("**materials.db fingerprint:**")
-                
-                if not db_path.exists():
-                    st.error(f"missing: {db_path}")
-                else:
-                    b = db_path.read_bytes()
-                    st.write(f"- **abs path:** {str(db_path.resolve())}")
-                    st.write(f"- **size:** {db_path.stat().st_size:,} bytes")
-                    st.write(f"- **mtime:** {datetime.fromtimestamp(db_path.stat().st_mtime).strftime('%Y-%m-%d %H:%M:%S')}")
-                    st.write(f"- **sha256:** {hashlib.sha256(b).hexdigest()[:16]}")
                     
-                    con = sqlite3.connect(str(db_path))
-                    try:
-                        cnt = con.execute("SELECT COUNT(*) FROM materials").fetchone()[0]
-                        st.write(f"- **count(materials):** {cnt} 件")
+                    if not db_path.exists():
+                        st.error(f"missing: {db_path}")
+                    else:
+                        b = db_path.read_bytes()
+                        st.write(f"- **abs path:** {str(db_path.resolve())}")
+                        st.write(f"- **size:** {db_path.stat().st_size:,} bytes")
+                        st.write(f"- **mtime:** {datetime.fromtimestamp(db_path.stat().st_mtime).strftime('%Y-%m-%d %H:%M:%S')}")
+                        st.write(f"- **sha256:** {hashlib.sha256(b).hexdigest()[:16]}")
                         
-                        cols = [r[1] for r in con.execute("PRAGMA table_info(materials)")]
-                        if len(cols) > 50:
-                            st.write(f"- **cols (先頭50件):** {', '.join(cols[:50])} ...")
-                            st.write(f"  (他 {len(cols) - 50} 列)")
-                        else:
-                            st.write(f"- **cols (全{len(cols)}件):** {', '.join(cols)}")
-                        
-                        if cnt > 0:
-                            first = con.execute("SELECT name_official, name FROM materials LIMIT 1").fetchone()
-                            if first:
-                                first_name = first[0] or first[1] or "N/A"
-                                st.write(f"- **first material name:** {first_name}")
-                    finally:
-                        con.close()
+                        con = sqlite3.connect(str(db_path))
+                        try:
+                            cnt = con.execute("SELECT COUNT(*) FROM materials").fetchone()[0]
+                            st.write(f"- **count(materials):** {cnt} 件")
+                            
+                            cols = [r[1] for r in con.execute("PRAGMA table_info(materials)")]
+                            if len(cols) > 50:
+                                st.write(f"- **cols (先頭50件):** {', '.join(cols[:50])} ...")
+                                st.write(f"  (他 {len(cols) - 50} 列)")
+                            else:
+                                st.write(f"- **cols (全{len(cols)}件):** {', '.join(cols)}")
+                            
+                            if cnt > 0:
+                                first = con.execute("SELECT name_official, name FROM materials LIMIT 1").fetchone()
+                                if first:
+                                    first_name = first[0] or first[1] or "N/A"
+                                    st.write(f"- **first material name:** {first_name}")
+                        finally:
+                            con.close()
                 except Exception as e:
                     # sidebarで例外が起きたら警告を出して続行（本体描画を止めない）
                     st.sidebar.warning("Sidebar: DB fingerprint failed")
