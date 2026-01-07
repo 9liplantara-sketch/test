@@ -31,38 +31,82 @@ Streamlit Cloudは無料でStreamlitアプリをホスティングできます�
    - 数分でアプリがオンラインで利用可能になります
    - URLは `https://your-app-name.streamlit.app` の形式
 
-### 画像の外部参照で差し替える手順
+### 画像の外部参照で差し替える手順（推奨運用）
 
 画像を外部ホストで管理し、差し替え運用を行う場合：
 
-1. **画像ホストに画像をアップロード**
-   - 画像ホスト（例: AWS S3, Cloudflare R2, GitHub Pages等）に以下の構造でアップロード：
-     ```
-     materials/{safe_slug}/primary.jpg
-     materials/{safe_slug}/uses/space.jpg
-     materials/{safe_slug}/uses/product.jpg
-     ```
-   - `safe_slug`は材料名から自動生成されるパス安全な文字列（例: "アルミニウム" → "アルミニウム"）
+#### 1. 画像ホストに画像をアップロード
 
-2. **Streamlit Cloud の Secrets に IMAGE_BASE_URL を設定**
-   - Streamlit Cloud の "Manage app" → "Secrets" を開く
-   - 以下を追加：
-     ```
-     IMAGE_BASE_URL=https://your-image-host.com
-     ```
-   - 末尾のスラッシュは不要（自動で処理されます）
+画像ホスト（例: AWS S3, Cloudflare R2, GitHub Pages等）に以下の構造でアップロード：
 
-3. **画像差し替え時は IMAGE_VERSION を更新（デプロイ不要で反映）**
-   - Streamlit Cloud の "Secrets" で `IMAGE_VERSION` を更新：
-     ```
-     IMAGE_VERSION=v2.0.0
-     ```
-   - アプリを再起動（"Manage app" → "Reboot"）すると、画像URLに `?v=v2.0.0` が付与され、キャッシュが無効化されます
-   - デプロイ不要で画像の差し替えが反映されます
+```
+materials/{safe_slug}/primary.jpg
+materials/{safe_slug}/uses/space.jpg
+materials/{safe_slug}/uses/product.jpg
+```
+
+- `safe_slug`は材料名から自動生成されるパス安全な文字列（例: "アルミニウム" → "アルミニウム"）
+- 画像は必ずJPG形式（`.jpg`）で保存してください
+
+#### 2. Streamlit Cloud の Secrets に IMAGE_BASE_URL を設定
+
+- Streamlit Cloud の "Manage app" → "Secrets" を開く
+- 以下を追加：
+  ```
+  IMAGE_BASE_URL=https://your-image-host.com
+  ```
+- 末尾のスラッシュは不要（自動で処理されます）
+
+#### 3. 画像差し替え時は IMAGE_VERSION を更新（デプロイ不要で反映）
+
+- Streamlit Cloud の "Secrets" で `IMAGE_VERSION` を更新：
+  ```
+  IMAGE_VERSION=v2.0.0
+  ```
+- アプリを再起動（"Manage app" → "Reboot"）すると、画像URLに `?v=v2.0.0` が付与され、キャッシュが無効化されます
+- **デプロイ不要で画像の差し替えが反映されます**
+
+#### 画像解決の優先順位
+
+アプリは以下の順序で画像を解決します：
+
+1. **DBの明示URL**（最優先）
+   - `Material.texture_image_url`（primary画像）
+   - `UseExample.image_url`（space/product画像）
+   - http(s) URLの場合のみ採用
+
+2. **IMAGE_BASE_URL 規約URL**
+   - `{IMAGE_BASE_URL}/materials/{safe_slug}/primary.jpg`
+   - `{IMAGE_BASE_URL}/materials/{safe_slug}/uses/space.jpg`
+   - `{IMAGE_BASE_URL}/materials/{safe_slug}/uses/product.jpg`
+   - URLには必ず `?v={IMAGE_VERSION or APP_VERSION or "dev"}` が付与されます
+
+3. **ローカルファイル fallback**
+   - `static/images/materials/{safe_slug}/primary.jpg`
+   - `static/images/materials/{safe_slug}/uses/space.jpg`
+   - `static/images/materials/{safe_slug}/uses/product.jpg`
+
+4. **旧互換 fallback**（最後の手段）
+   - 日本語フォルダ名など、旧仕様のフォルダを探索
+   - safe_slug配下が無い場合のみ試行
 
 ### ローカルのみで回す場合
 
 `IMAGE_BASE_URL` を未設定にすると、`static/images/materials/` 内のローカルファイルを使用します。
+
+### 画像アセットの検証
+
+ローカルで画像アセットの検証を行う場合：
+
+```bash
+# 通常モード（警告のみ）
+python scripts/verify_assets.py
+
+# Strictモード（local branch時はexists必須）
+python scripts/verify_assets.py --strict
+```
+
+GitHub Actionsでも自動検証が実行されます（main push/PR時）。
 
 ### 必要なファイル
 

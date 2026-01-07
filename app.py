@@ -1587,7 +1587,8 @@ def show_home():
             # 装飾として配置
             col1, col2, col3 = st.columns([1, 2, 1])
             with col1:
-                st.image(sub_img, width=200)
+                from utils.image_display import display_image_unified
+                display_image_unified(sub_img, width=200)
             with col2:
                 st.markdown("""
                 <div class="hero-section">
