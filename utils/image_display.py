@@ -10,6 +10,7 @@ from PIL import Image as PILImage
 from typing import Optional, Tuple, Union, Dict, Literal
 import re
 import base64
+from io import BytesIO
 
 try:
     from material_map_version import APP_VERSION
@@ -275,6 +276,117 @@ def to_data_url(image_path: Path) -> Optional[str]:
         base64_data = base64.b64encode(img_data).decode('utf-8')
         return f"data:{mime_type};base64,{base64_data}"
     except Exception:
+        return None
+
+
+def to_png_bytes(image_source: Optional[Union[str, Path, PILImage.Image]], max_size: Optional[Tuple[int, int]] = None) -> Optional[bytes]:
+    """
+    画像ソースをPNG bytesに変換
+    
+    Args:
+        image_source: URL文字列、Pathオブジェクト、またはPILImage
+        max_size: 最大サイズ（幅, 高さ）のタプル。指定するとリサイズする
+    
+    Returns:
+        PNG bytes、またはNone
+    """
+    if image_source is None:
+        return None
+    
+    try:
+        if isinstance(image_source, Path):
+            # Path: PILで開いてPNG bytesに変換
+            if not image_source.exists() or not image_source.is_file():
+                return None
+            img = PILImage.open(image_source)
+            if img.mode != 'RGB':
+                if img.mode in ('RGBA', 'LA', 'P'):
+                    rgb_img = PILImage.new('RGB', img.size, (255, 255, 255))
+                    if img.mode == 'RGBA':
+                        rgb_img.paste(img, mask=img.split()[3])
+                    elif img.mode == 'LA':
+                        rgb_img.paste(img.convert('RGB'), mask=img.split()[1])
+                    else:
+                        rgb_img = img.convert('RGB')
+                    img = rgb_img
+                else:
+                    img = img.convert('RGB')
+            # リサイズが必要な場合
+            if max_size:
+                img.thumbnail(max_size, PILImage.Resampling.LANCZOS)
+            buffer = BytesIO()
+            img.save(buffer, format='PNG')
+            return buffer.getvalue()
+        
+        elif isinstance(image_source, PILImage.Image):
+            # PIL Image: PNG bytesに変換
+            img = image_source
+            if img.mode != 'RGB':
+                if img.mode in ('RGBA', 'LA', 'P'):
+                    rgb_img = PILImage.new('RGB', img.size, (255, 255, 255))
+                    if img.mode == 'RGBA':
+                        rgb_img.paste(img, mask=img.split()[3])
+                    elif img.mode == 'LA':
+                        rgb_img.paste(img.convert('RGB'), mask=img.split()[1])
+                    else:
+                        rgb_img = img.convert('RGB')
+                    img = rgb_img
+                else:
+                    img = img.convert('RGB')
+            # リサイズが必要な場合
+            if max_size:
+                img.thumbnail(max_size, PILImage.Resampling.LANCZOS)
+            buffer = BytesIO()
+            img.save(buffer, format='PNG')
+            return buffer.getvalue()
+        
+        elif isinstance(image_source, str):
+            # URLまたはdata URL
+            if image_source.startswith('data:'):
+                # data URL: base64 decodeしてbytes化
+                try:
+                    header, encoded = image_source.split(',', 1)
+                    img_data = base64.b64decode(encoded)
+                    # リサイズが必要な場合はPILで開いて処理
+                    if max_size:
+                        from io import BytesIO
+                        img = PILImage.open(BytesIO(img_data))
+                        if img.mode != 'RGB':
+                            if img.mode in ('RGBA', 'LA', 'P'):
+                                rgb_img = PILImage.new('RGB', img.size, (255, 255, 255))
+                                if img.mode == 'RGBA':
+                                    rgb_img.paste(img, mask=img.split()[3])
+                                elif img.mode == 'LA':
+                                    rgb_img.paste(img.convert('RGB'), mask=img.split()[1])
+                                else:
+                                    rgb_img = img.convert('RGB')
+                                img = rgb_img
+                            else:
+                                img = img.convert('RGB')
+                        img.thumbnail(max_size, PILImage.Resampling.LANCZOS)
+                        buffer = BytesIO()
+                        img.save(buffer, format='PNG')
+                        return buffer.getvalue()
+                    return img_data
+                except Exception:
+                    return None
+            elif image_source.startswith(('http://', 'https://')):
+                # http(s) URL: bytes化は原則不要（st.imageに直接URLを渡す方針）
+                # ただし、HTML内でdata URLが必要な場合はNoneを返す（呼び出し側でURLを直接使う）
+                return None
+            else:
+                # ローカルパス文字列: Pathとして処理
+                path = Path(image_source)
+                if path.exists() and path.is_file():
+                    return to_png_bytes(path, max_size=max_size)
+                return None
+        
+        else:
+            return None
+    
+    except Exception as e:
+        if os.getenv("DEBUG", "0") == "1":
+            print(f"[to_png_bytes] Error: {e}")
         return None
 
 

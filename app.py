@@ -1777,15 +1777,17 @@ def show_home():
                             separator = "&" if "?" in image_source else "?"
                             st.image(f"{image_source}{separator}v={APP_VERSION}", width=120)
                         else:
-                            # PILImageの場合はBase64エンコードして直接表示（キャッシュ回避）
-                            thumb_size = (120, 120)
-                            image_source.thumbnail(thumb_size, PILImage.Resampling.LANCZOS)
-                            buffer = BytesIO()
-                            image_source.save(buffer, format='PNG')
-                            img_base64 = base64.b64encode(buffer.getvalue()).decode()
-                            # 画像のハッシュをキーとして使用（キャッシュ対策）
-                            img_hash = hashlib.md5(buffer.getvalue()).hexdigest()[:8]
-                            st.image(f"data:image/png;base64,{img_base64}", width=120)
+                            # Path/PILImageの場合はto_png_bytes()で統一処理（サムネイルサイズ指定）
+                            from utils.image_display import to_png_bytes
+                            png_bytes = to_png_bytes(image_source, max_size=(120, 120))
+                            if png_bytes:
+                                img_base64 = base64.b64encode(png_bytes).decode()
+                                # 画像のハッシュをキーとして使用（キャッシュ対策）
+                                img_hash = hashlib.md5(png_bytes).hexdigest()[:8]
+                                st.image(f"data:image/png;base64,{img_base64}", width=120)
+                            else:
+                                # プレースホルダーを表示
+                                display_image_unified(None, width=120)
                     else:
                         # プレースホルダーを表示
                         display_image_unified(None, width=120, placeholder_size=(120, 120))
@@ -1959,14 +1961,29 @@ def show_materials_list():
                                     img_html = f'<img src="data:{mime_type};base64,{img_base64}" class="material-hero-image" alt="{material_name}" />'
                             else:
                                 img_html = f'<div class="material-hero-image" style="display: flex; align-items: center; justify-content: center; color: #999; font-size: 14px;">画像なし</div>'
+                    elif isinstance(image_source, Path):
+                        # Pathの場合はto_data_url()またはto_png_bytes()でdata URLに変換
+                        from utils.image_display import to_data_url, to_png_bytes
+                        data_url = to_data_url(image_source)
+                        if data_url:
+                            img_html = f'<img src="{data_url}" class="material-hero-image" alt="{material_name}" />'
+                        else:
+                            # to_data_urlが失敗した場合はto_png_bytesでPNG bytes化
+                            png_bytes = to_png_bytes(image_source)
+                            if png_bytes:
+                                img_base64 = base64.b64encode(png_bytes).decode()
+                                img_html = f'<img src="data:image/png;base64,{img_base64}" class="material-hero-image" alt="{material_name}" />'
+                            else:
+                                img_html = f'<div class="material-hero-image" style="display: flex; align-items: center; justify-content: center; color: #999; font-size: 14px;">画像なし</div>'
                     else:
-                        # PILImageの場合はBase64エンコード（キャッシュ回避）
-                        from io import BytesIO
-                        import base64
-                        buffer = BytesIO()
-                        image_source.save(buffer, format='PNG')
-                        img_base64 = base64.b64encode(buffer.getvalue()).decode()
-                        img_html = f'<img src="data:image/png;base64,{img_base64}" class="material-hero-image" alt="{material_name}" />'
+                        # PILImageの場合はto_png_bytes()でPNG bytes化
+                        from utils.image_display import to_png_bytes
+                        png_bytes = to_png_bytes(image_source)
+                        if png_bytes:
+                            img_base64 = base64.b64encode(png_bytes).decode()
+                            img_html = f'<img src="data:image/png;base64,{img_base64}" class="material-hero-image" alt="{material_name}" />'
+                        else:
+                            img_html = f'<div class="material-hero-image" style="display: flex; align-items: center; justify-content: center; color: #999; font-size: 14px;">画像なし</div>'
                 else:
                     # プレースホルダー
                     img_html = f'<div class="material-hero-image" style="display: flex; align-items: center; justify-content: center; color: #999; font-size: 14px;">画像なし</div>'
@@ -2175,32 +2192,46 @@ def show_search():
                                     # data:URLの場合はそのまま
                                     img_html = f'<img src="{image_source}" class="material-hero-image" alt="{material.name}" />'
                                 else:
-                                    # ローカルパスの場合はdata URLに変換
+                                    # ローカルパス文字列の場合はPathとして処理
                                     path = Path(image_source)
                                     if path.exists() and path.is_file():
-                                        with open(path, 'rb') as f:
-                                            img_bytes = f.read()
-                                            img_base64 = base64.b64encode(img_bytes).decode()
-                                            # 拡張子からMIMEタイプを判定
-                                            ext = path.suffix.lower()
-                                            mime_type = {
-                                                '.jpg': 'image/jpeg',
-                                                '.jpeg': 'image/jpeg',
-                                                '.png': 'image/png',
-                                                '.webp': 'image/webp',
-                                                '.gif': 'image/gif'
-                                            }.get(ext, 'image/png')
-                                            img_html = f'<img src="data:{mime_type};base64,{img_base64}" class="material-hero-image" alt="{material.name}" />'
+                                        from utils.image_display import to_data_url, to_png_bytes
+                                        data_url = to_data_url(path)
+                                        if data_url:
+                                            img_html = f'<img src="{data_url}" class="material-hero-image" alt="{material.name}" />'
+                                        else:
+                                            # to_data_urlが失敗した場合はto_png_bytesでPNG bytes化
+                                            png_bytes = to_png_bytes(path)
+                                            if png_bytes:
+                                                img_base64 = base64.b64encode(png_bytes).decode()
+                                                img_html = f'<img src="data:image/png;base64,{img_base64}" class="material-hero-image" alt="{material.name}" />'
+                                            else:
+                                                img_html = f'<div class="material-hero-image" style="display: flex; align-items: center; justify-content: center; color: #999; font-size: 14px;">画像なし</div>'
+                                    else:
+                                        img_html = f'<div class="material-hero-image" style="display: flex; align-items: center; justify-content: center; color: #999; font-size: 14px;">画像なし</div>'
+                            elif isinstance(image_source, Path):
+                                # Pathの場合はto_data_url()またはto_png_bytes()でdata URLに変換
+                                from utils.image_display import to_data_url, to_png_bytes
+                                data_url = to_data_url(image_source)
+                                if data_url:
+                                    img_html = f'<img src="{data_url}" class="material-hero-image" alt="{material.name}" />'
+                                else:
+                                    # to_data_urlが失敗した場合はto_png_bytesでPNG bytes化
+                                    png_bytes = to_png_bytes(image_source)
+                                    if png_bytes:
+                                        img_base64 = base64.b64encode(png_bytes).decode()
+                                        img_html = f'<img src="data:image/png;base64,{img_base64}" class="material-hero-image" alt="{material.name}" />'
                                     else:
                                         img_html = f'<div class="material-hero-image" style="display: flex; align-items: center; justify-content: center; color: #999; font-size: 14px;">画像なし</div>'
                             else:
-                                # PILImageの場合はBase64エンコード
-                                from io import BytesIO
-                                import base64
-                                buffer = BytesIO()
-                                image_source.save(buffer, format='PNG')
-                                img_base64 = base64.b64encode(buffer.getvalue()).decode()
-                                img_html = f'<img src="data:image/png;base64,{img_base64}" class="material-hero-image" alt="{material.name}" />'
+                                # PILImageの場合はto_png_bytes()でPNG bytes化
+                                from utils.image_display import to_png_bytes
+                                png_bytes = to_png_bytes(image_source)
+                                if png_bytes:
+                                    img_base64 = base64.b64encode(png_bytes).decode()
+                                    img_html = f'<img src="data:image/png;base64,{img_base64}" class="material-hero-image" alt="{material.name}" />'
+                                else:
+                                    img_html = f'<div class="material-hero-image" style="display: flex; align-items: center; justify-content: center; color: #999; font-size: 14px;">画像なし</div>'
                         else:
                             # プレースホルダー
                             img_html = f'<div class="material-hero-image" style="display: flex; align-items: center; justify-content: center; color: #999; font-size: 14px;">画像なし</div>'
