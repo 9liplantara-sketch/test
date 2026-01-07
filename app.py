@@ -77,15 +77,17 @@ def run_app_entrypoint():
     st.write("✅ app.py is running (entrypoint reached)")
 
     # 2) 先にサイドバーDebugを描画（既存関数がある想定）
-    # 例外が起きても最後まで描く（st.stop()は呼ばない）
-    try:
-        if "render_debug_sidebar_early" in globals():
-            render_debug_sidebar_early()
-        else:
-            st.sidebar.info("render_debug_sidebar_early() not found")
-    except Exception as e:
-        _panic_screen("render_debug_sidebar_early", e)
-        # st.stop()は呼ばない（本文を表示するため）
+    # 同一run内で1回だけ描画する（二重表示を防ぐ）
+    if "debug_sidebar_rendered" not in st.session_state:
+        try:
+            if "render_debug_sidebar_early" in globals():
+                render_debug_sidebar_early()
+                st.session_state["debug_sidebar_rendered"] = True
+            else:
+                st.sidebar.info("render_debug_sidebar_early() not found")
+        except Exception as e:
+            _panic_screen("render_debug_sidebar_early", e)
+            # st.stop()は呼ばない（本文を表示するため）
 
     # 3) DB初期化（落ちても本文に出す）
     try:
@@ -1267,6 +1269,19 @@ def render_debug_sidebar_early():
                 import re
                 
                 base = Path(__file__).parent / "static" / "images" / "materials"
+                # Cloud Secretsの前提を明記
+                image_base_url = os.getenv("IMAGE_BASE_URL")
+                image_version = os.getenv("IMAGE_VERSION")
+                st.write("**Cloud Secrets:**")
+                st.write(f"- **IMAGE_BASE_URL:** {'設定済み' if image_base_url else '未設定'}")
+                if image_base_url:
+                    # 伏字で表示（最初の10文字のみ）
+                    masked = image_base_url[:10] + "..." if len(image_base_url) > 10 else image_base_url
+                    st.write(f"  - 値: {masked}")
+                st.write(f"- **IMAGE_VERSION:** {'設定済み' if image_version else '未設定'}")
+                if image_version:
+                    st.write(f"  - 値: {image_version[:10]}...")
+                
                 st.write("**画像探索情報:**")
                 st.write(f"- **base dir:** {str(base)}")
                 
@@ -1295,31 +1310,39 @@ def render_debug_sidebar_early():
                                 forbidden_chars = r'[/\\:*?"<>|]'
                                 safe_slug = re.sub(forbidden_chars, '_', safe_slug)
                                 
-                                # フォルダ名解決
-                                dir_name, dbg = resolve_material_dir_name(m, base, safe_slug)
-                                material_dir = base / dir_name
+                                # get_material_image_refを使用して画像参照を取得
+                                from utils.image_display import get_material_image_ref
                                 
-                                p_primary = material_dir / "primary.jpg"
-                                p_space = material_dir / "uses" / "space.jpg"
-                                p_product = material_dir / "uses" / "product.jpg"
+                                # project_rootはbaseの親の親の親（static/images/materials -> static/images -> static -> プロジェクトルート）
+                                project_root = base.parent.parent.parent
+                                primary_src, primary_debug = get_material_image_ref(m, "primary", project_root)
+                                space_src, space_debug = get_material_image_ref(m, "space", project_root)
+                                product_src, product_debug = get_material_image_ref(m, "product", project_root)
                                 
                                 material_display_name = getattr(m, 'name_official', None) or getattr(m, 'name', None) or "N/A"
                                 
                                 with st.expander(f"📦 {material_display_name}", expanded=False):
-                                    st.json({
-                                        "safe_slug": safe_slug,
-                                        "dir_name": dir_name,
-                                        "dir_exists": material_dir.exists(),
-                                        "primary": str(p_primary),
-                                        "primary_exists": p_primary.exists(),
-                                        "space_exists": p_space.exists(),
-                                        "product_exists": p_product.exists(),
-                                    })
+                                    # 簡潔表示: dir_name, chosen_branch, final_srcのみ
+                                    dir_name = primary_debug.get('resolved_dir') or space_debug.get('resolved_dir') or product_debug.get('resolved_dir') or "N/A"
+                                    chosen_branch = primary_debug.get('chosen_branch', 'unknown')
+                                    final_src_type = primary_debug.get('final_src_type', 'unknown')
                                     
-                                    if not p_primary.exists():
+                                    st.write(f"**dir_name:** {dir_name}")
+                                    st.write(f"**chosen_branch:** {chosen_branch}")
+                                    st.write(f"**final_src_type:** {final_src_type}")
+                                    
+                                    if primary_src:
+                                        if isinstance(primary_src, str):
+                                            st.write(f"**final_url:** {primary_src[:80]}..." if len(primary_src) > 80 else f"**final_url:** {primary_src}")
+                                        elif isinstance(primary_src, Path):
+                                            st.write(f"**final_path:** {primary_src.resolve()}")
+                                            st.write(f"**exists:** {primary_debug.get('final_path_exists', False)}")
+                                    else:
                                         st.warning("⚠️ primary.jpg not found")
-                                        with st.expander("🔍 why not found?", expanded=False):
-                                            st.json(dbg)
+                                    
+                                    # 詳細情報はexpanderへ
+                                    with st.expander("🔍 詳細デバッグ情報", expanded=False):
+                                        st.json(primary_debug)
                             except Exception as e:
                                 st.write(f"❌ {getattr(m, 'name_official', None) or 'N/A'}: {e}")
                                 with st.expander("詳細", expanded=False):
@@ -1346,11 +1369,14 @@ def main():
     
     # 1. Debugを先に描画（UIが出る前に死ぬ問題を回避）
     # 例外が起きても最後まで描く（st.stop()は呼ばない）
-    try:
-        render_debug_sidebar_early()
-    except Exception as e:
-        _panic_screen("render_debug_sidebar_early in main()", e)
-        # st.stop()は呼ばない（本文を表示するため）
+    # 同一run内で1回だけ描画する（二重表示を防ぐ）
+    if "debug_sidebar_rendered" not in st.session_state:
+        try:
+            render_debug_sidebar_early()
+            st.session_state["debug_sidebar_rendered"] = True
+        except Exception as e:
+            _panic_screen("render_debug_sidebar_early in main()", e)
+            # st.stop()は呼ばない（本文を表示するため）
     
     # 2. init_db()を呼ぶ（常に）
     # 例外が起きても本文を表示する（st.stop()は呼ばない）
@@ -1557,7 +1583,7 @@ def show_home():
             # 装飾として配置
             col1, col2, col3 = st.columns([1, 2, 1])
             with col1:
-                st.image(sub_img, width=200, use_container_width=False)
+                st.image(sub_img, width=200)
             with col2:
                 st.markdown("""
                 <div class="hero-section">
@@ -1569,7 +1595,7 @@ def show_home():
                 </div>
                 """, unsafe_allow_html=True)
             with col3:
-                st.image(sub_img, width=200, use_container_width=False)
+                st.image(sub_img, width=200)
         except Exception as e:
             # 画像読み込み失敗時は通常のヒーローセクション
             st.markdown("""
@@ -1634,6 +1660,62 @@ def show_home():
         </div>
         """, unsafe_allow_html=True)
     
+    # 強制画像テスト（一時診断用）
+    if materials:
+        st.markdown("---")
+        st.markdown("### 🔍 強制画像テスト（診断用）")
+        test_material = materials[0]
+        from utils.image_display import get_material_image_ref
+        test_src, test_debug = get_material_image_ref(test_material, "primary", Path.cwd())
+        
+        st.write(f"**テスト対象:** {test_material.name_official or test_material.name}")
+        st.write(f"**chosen_branch:** {test_debug.get('chosen_branch', 'N/A')}")
+        st.write(f"**final_src_type:** {test_debug.get('final_src_type', 'N/A')}")
+        
+        if test_src:
+            if isinstance(test_src, Path):
+                st.write(f"**Path:** {test_src.resolve()}")
+                st.write(f"**exists:** {test_src.exists()}")
+                st.write(f"**is_file:** {test_src.is_file()}")
+                if test_src.exists() and test_src.is_file():
+                    st.image(test_src, width=200, caption="Path直接表示テスト")
+            elif isinstance(test_src, str):
+                st.write(f"**URL:** {test_src}")
+                st.image(test_src, width=200, caption="URL直接表示テスト")
+        else:
+            st.warning("画像が見つかりませんでした")
+        
+        with st.expander("🔍 詳細デバッグ情報", expanded=True):
+            st.json(test_debug)
+    
+    # 強制画像テスト（一時診断用）
+    if materials:
+        st.markdown("---")
+        st.markdown("### 🔍 強制画像テスト（診断用）")
+        test_material = materials[0]
+        from utils.image_display import get_material_image_ref
+        test_src, test_debug = get_material_image_ref(test_material, "primary", Path.cwd())
+        
+        st.write(f"**テスト対象:** {test_material.name_official or test_material.name}")
+        st.write(f"**chosen_branch:** {test_debug.get('chosen_branch', 'N/A')}")
+        st.write(f"**final_src_type:** {test_debug.get('final_src_type', 'N/A')}")
+        
+        if test_src:
+            if isinstance(test_src, Path):
+                st.write(f"**Path:** {test_src.resolve()}")
+                st.write(f"**exists:** {test_src.exists()}")
+                st.write(f"**is_file:** {test_src.is_file()}")
+                if test_src.exists() and test_src.is_file():
+                    st.image(test_src, width=200, caption="Path直接表示テスト")
+            elif isinstance(test_src, str):
+                st.write(f"**URL:** {test_src}")
+                st.image(test_src, width=200, caption="URL直接表示テスト")
+        else:
+            st.warning("画像が見つかりませんでした")
+        
+        with st.expander("🔍 詳細デバッグ情報", expanded=True):
+            st.json(test_debug)
+    
     # 最近登録された材料
     if materials:
         st.markdown('<h3 class="section-title">最近登録された材料</h3>', unsafe_allow_html=True)
@@ -1646,14 +1728,14 @@ def show_home():
                 
                 with col_img:
                     # サムネ画像を表示（キャッシュ対策: Base64エンコードで直接表示）
-                    from utils.image_display import get_display_image_source, display_image_unified
+                    from utils.image_display import get_material_image_ref, display_image_unified
                     import hashlib
                     import time
                     
-                    # 材料の主画像を取得（Imageテーブルから）
-                    image_source = None
-                    if material.images:
-                        image_source = get_display_image_source(material.images[0], Path.cwd())
+                    # 材料の主画像を取得（get_material_image_refを使用）
+                    # get_material_image_refを使用
+                    image_src, image_debug = get_material_image_ref(material, "primary", Path.cwd())
+                    image_source = image_src
                     
                     # サムネサイズで表示（プレースホルダー付き）
                     if image_source:
@@ -1678,7 +1760,7 @@ def show_home():
                                         pil_img = pil_img.convert('RGB')
                                 thumb_size = (120, 120)
                                 pil_img.thumbnail(thumb_size, PILImage.Resampling.LANCZOS)
-                                st.image(pil_img, width=120, use_container_width=False)
+                                st.image(pil_img, width=120)
                             else:
                                 display_image_unified(None, width=120, placeholder_size=(120, 120))
                         elif isinstance(image_source, str) and image_source.startswith(('http://', 'https://')):
@@ -1688,7 +1770,7 @@ def show_home():
                             except ImportError:
                                 APP_VERSION = get_git_sha()
                             separator = "&" if "?" in image_source else "?"
-                            st.image(f"{image_source}{separator}v={APP_VERSION}", width=120, use_container_width=False)
+                            st.image(f"{image_source}{separator}v={APP_VERSION}", width=120)
                         else:
                             # PILImageの場合はBase64エンコードして直接表示（キャッシュ回避）
                             thumb_size = (120, 120)
@@ -1698,7 +1780,7 @@ def show_home():
                             img_base64 = base64.b64encode(buffer.getvalue()).decode()
                             # 画像のハッシュをキーとして使用（キャッシュ対策）
                             img_hash = hashlib.md5(buffer.getvalue()).hexdigest()[:8]
-                            st.image(f"data:image/png;base64,{img_base64}", width=120, use_container_width=False)
+                            st.image(f"data:image/png;base64,{img_base64}", width=120)
                     else:
                         # プレースホルダーを表示
                         display_image_unified(None, width=120, placeholder_size=(120, 120))
@@ -1829,13 +1911,15 @@ def show_materials_list():
                 material_desc = material.description or ""
                 
                 # 素材画像を取得（キャッシュ対策: Base64エンコードで直接表示）
-                from utils.image_display import get_display_image_source, display_image_unified
+                from utils.image_display import get_material_image_ref, display_image_unified
                 import hashlib
                 import time
                 
                 image_source = None
                 if material.images:
-                    image_source = get_display_image_source(material.images[0], Path.cwd())
+                    # get_material_image_refを使用
+                    image_src, image_debug = get_material_image_ref(material, "primary", Path.cwd())
+                    image_source = image_src
                 
                 # 画像HTML（プレースホルダー含む、キャッシュ回避）
                 if image_source:
@@ -1934,7 +2018,7 @@ def show_materials_list():
                 </style>
                 """, unsafe_allow_html=True)
                 
-                if st.button(f"詳細を見る", key=button_key, use_container_width=True):
+                if st.button(f"詳細を見る", key=button_key, width='stretch'):
                     st.session_state.selected_material_id = material.id
                     st.session_state.page = "材料一覧"  # 一覧ページの詳細表示モード
                     st.rerun()
@@ -1999,12 +2083,12 @@ def show_dashboard():
     with col1:
         fig = create_category_chart(materials)
         if fig:
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width='stretch')
     
     with col2:
         fig = create_timeline_chart(materials)
         if fig:
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width='stretch')
     
     # カテゴリ別詳細
     st.markdown("### カテゴリ別詳細")
@@ -2066,10 +2150,10 @@ def show_search():
                         prop_text = f'<p style="color: #555; margin-top: 12px;"><strong>物性データ:</strong> {prop_count}個</p>' if prop_count > 0 else ''
                         
                         # 素材画像を取得（主役として表示、URL優先）
-                        from utils.image_display import get_display_image_source
-                        image_source = None
-                        if material.images:
-                            image_source = get_display_image_source(material.images[0], Path.cwd())
+                        from utils.image_display import get_material_image_ref
+                        # get_material_image_refを使用
+                        image_src, image_debug = get_material_image_ref(material, "primary", Path.cwd())
+                        image_source = image_src
                         
                         # 画像HTML（プレースホルダー含む、キャッシュ回避）
                         if image_source:
@@ -2161,7 +2245,7 @@ def show_search():
                         </style>
                         """, unsafe_allow_html=True)
                         
-                        if st.button(f"詳細を見る", key=button_key, use_container_width=True):
+                        if st.button(f"詳細を見る", key=button_key, width='stretch'):
                             st.session_state.selected_material_id = material.id
                             st.session_state.page = "材料一覧"  # 一覧ページの詳細表示モードに遷移
                             st.rerun()
@@ -2280,6 +2364,12 @@ def show_material_cards():
             )
             
             card_data = MaterialCard(payload=card_payload)
+            # Materialオブジェクトを直接渡せるようにする（画像URL取得のため）
+            # 重要: material_objを必ず設定する（card_generatorで画像取得に必要）
+            if material is None:
+                st.warning(f"⚠️ material is None for card generation (ID: {card_payload.id})")
+            else:
+                card_data.material_obj = material
             card_html = generate_material_card(card_data)
             
         except Exception as e:
@@ -2347,7 +2437,7 @@ def show_material_cards():
             data=card_html,
             file_name=f"material_card_{material.id}.html",
             mime="text/html",
-            use_container_width=True
+            width='stretch'
         )
 
 

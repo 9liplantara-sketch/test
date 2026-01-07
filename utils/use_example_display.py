@@ -11,7 +11,6 @@ from utils.image_health import resolve_image_path, normalize_image_path, check_i
 def display_use_example_image(
     use_example,
     width: Optional[int] = 280,
-    use_container_width: bool = False,
     project_root: Optional[Path] = None
 ):
     """
@@ -20,7 +19,6 @@ def display_use_example_image(
     Args:
         use_example: UseExampleオブジェクト
         width: 画像幅
-        use_container_width: コンテナ幅を使用するか
         project_root: プロジェクトルートのパス
     """
     if project_root is None:
@@ -48,7 +46,7 @@ def display_use_example_image(
             fill=(150, 150, 150),
             font=font
         )
-        st.image(placeholder, width=width, use_container_width=use_container_width)
+        st.image(placeholder, width=width)
         return
     
     # パスを正規化・解決
@@ -76,12 +74,12 @@ def display_use_example_image(
                 else:
                     pil_img = pil_img.convert('RGB')
             
-            st.image(pil_img, width=width, use_container_width=use_container_width)
+            st.image(pil_img, width=width)
         except Exception as e:
             st.warning(f"画像の読み込みに失敗: {e}")
             # プレースホルダーを表示
             placeholder = PILImage.new('RGB', (280, 200), (240, 240, 240))
-            st.image(placeholder, width=width, use_container_width=use_container_width)
+            st.image(placeholder, width=width)
     else:
         # エラー時はプレースホルダーを表示
         st.warning(f"画像が利用できません: {health['reason']}")
@@ -102,5 +100,5 @@ def display_use_example_image(
             fill=(150, 150, 150),
             font=font
         )
-        st.image(placeholder, width=width, use_container_width=use_container_width)
+        st.image(placeholder, width=width)
 

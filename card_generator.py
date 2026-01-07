@@ -7,6 +7,14 @@ from io import BytesIO
 import base64
 import os
 from pathlib import Path
+from typing import Optional
+
+try:
+    from utils.image_display import get_material_image_src
+except ImportError:
+    # フォールバック: 関数が存在しない場合
+    def get_material_image_src(material, kind, project_root=None):
+        return None, {}
 
 
 def get_image_path(filename):
@@ -62,12 +70,45 @@ def generate_material_card(card_data: MaterialCard) -> str:
     sub_bg_base64 = get_base64_image(sub_bg_path) if sub_bg_path else None
     texture_bg = f'url("data:image/webp;base64,{sub_bg_base64}")' if sub_bg_base64 else 'none'
     
-    # 画像パスの処理
-    image_url = ""
-    if primary_image_path:
-        # ファイルパスから相対パスを生成
-        file_name = primary_image_path.split('/')[-1] if '/' in primary_image_path else primary_image_path.split('\\')[-1]
-        image_url = f"/uploads/{file_name}"
+    # 画像パスの処理（参照URL方式に統一）
+    # Materialオブジェクトを取得（payloadから構築、または直接受け取る）
+    # 注意: payloadはPydanticモデルなので、Materialオブジェクトに変換する必要がある
+    # ここでは、payloadの情報からMaterialオブジェクトを模擬的に作成
+    class MaterialProxy:
+        """Materialオブジェクトのプロキシ（payloadから情報を取得）"""
+        def __init__(self, payload):
+            self.id = payload.id
+            self.name_official = getattr(payload, 'name_official', None) or getattr(payload, 'name', None)
+            self.name = getattr(payload, 'name', None)
+            self.texture_image_url = getattr(payload, 'texture_image_url', None)
+            self.texture_image_path = getattr(payload, 'texture_image_path', None) or primary_image_path
+            # use_examplesはpayloadに含まれていない可能性があるので、空リストを返す
+            self.use_examples = []
+    
+    # Materialオブジェクトを取得（実際のMaterialオブジェクトが渡されている場合はそれを使用）
+    material_obj = getattr(card_data, 'material_obj', None)
+    if material_obj is None:
+        # payloadからMaterialProxyを作成（フォールバック）
+        # 注意: material_objがNoneの場合は、DBから引き直すか例外をdebugに出す
+        import warnings
+        warnings.warn(f"card_generator: material_obj is None for material_id={payload.id}, using MaterialProxy")
+        material_obj = MaterialProxy(payload)
+    
+    # get_material_image_ref()を使用して画像srcを取得
+    from utils.image_display import get_material_image_ref, to_data_url
+    image_src, image_debug = get_material_image_ref(material_obj, "primary", project_root=Path.cwd())
+    
+    # image_srcがURLの場合はそのまま、Pathの場合はdata URLに変換
+    if image_src is None:
+        image_url = ""
+    elif isinstance(image_src, str):
+        image_url = image_src
+    elif isinstance(image_src, Path):
+        # HTMLカード生成の場合はdata URLに変換
+        data_url = to_data_url(image_src)
+        image_url = data_url or ""
+    else:
+        image_url = ""
     
     # 主要物性データの取得
     main_properties = properties[:8] if properties else []
@@ -92,7 +133,7 @@ def generate_material_card(card_data: MaterialCard) -> str:
     display_block = "block"
     
     # 画像のonerror属性用のJavaScriptコード
-    if primary_image_path:
+    if image_url:
         img_onerror = f'this.style.display="{display_none}"; this.nextElementSibling.style.display="{display_block}";'
     else:
         img_onerror = ""
@@ -371,8 +412,8 @@ def generate_material_card(card_data: MaterialCard) -> str:
             
             <div class="card-body">
                 <div class="image-section">
-                    {f'<img src="{image_url}" alt="{material_name}" class="material-image" onerror="{img_onerror}">' if primary_image_path else ''}
-                    {'<div class="no-image" style="display:none;">📷 画像なし</div>' if primary_image_path else '<div class="no-image">📷 画像なし</div>'}
+                    {f'<img src="{image_url}" alt="{material_name}" class="material-image" onerror="{img_onerror}">' if image_url else ''}
+                    {'<div class="no-image" style="display:none;">📷 画像なし</div>' if image_url else '<div class="no-image">📷 画像なし</div>'}
                 </div>
                 
                 <div class="properties-section">

@@ -481,7 +481,7 @@ def render_element_cell(
     if st.button(
         f"{atomic_num}\n{symbol}",
         key=button_key,
-        use_container_width=True,
+        width='stretch',
         help=f"{name} (原子番号: {atomic_num})"
     ):
         st.session_state.selected_element_atomic_number = atomic_num

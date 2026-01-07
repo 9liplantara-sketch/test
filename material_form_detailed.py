@@ -109,7 +109,7 @@ def show_detailed_material_form():
             form_data.update(layer2_data)
     
     # フォーム送信
-    if form_data and st.button("✅ 材料を登録", type="primary", use_container_width=True):
+    if form_data and st.button("✅ 材料を登録", type="primary", width='stretch'):
         try:
             save_material(form_data)
             st.success("✅ 材料を登録しました！")
