@@ -1041,10 +1041,39 @@ def main():
         
         # デバッグ情報（一時的）
         with st.expander("🔧 Debug (temporary)", expanded=False):
+            # materials.db の情報
+            db_path = Path("materials.db")
+            if db_path.exists():
+                stat = db_path.stat()
+                st.write("**materials.db 情報:**")
+                st.write(f"- **path:** {db_path.absolute()}")
+                st.write(f"- **mtime:** {datetime.fromtimestamp(stat.st_mtime).strftime('%Y-%m-%d %H:%M:%S')}")
+                st.write(f"- **size:** {stat.st_size:,} bytes ({stat.st_size / 1024:.2f} KB)")
+                
+                # DBのmaterials件数（sqlite3で直接取得）
+                try:
+                    import sqlite3
+                    conn = sqlite3.connect(str(db_path.absolute()))
+                    try:
+                        cursor = conn.cursor()
+                        cursor.execute("SELECT COUNT(*) FROM materials")
+                        material_count = cursor.fetchone()[0]
+                        st.write(f"- **materials件数:** {material_count} 件 (sqlite3)")
+                    finally:
+                        conn.close()
+                except Exception as e:
+                    st.write(f"- **materials件数:** エラー ({str(e)})")
+            else:
+                st.write("**materials.db:** 見つかりませんでした ❌")
+            
+            st.write("---")
+            
+            # 画像パス探索の情報
             from utils.image_display import find_material_image_paths
             debug_info = {}
             image_paths = find_material_image_paths("アルミニウム", Path.cwd(), debug_info=debug_info)
             
+            st.write("**画像パス探索（アルミニウム）:**")
             st.write("**材料名:**", debug_info.get('material_name'))
             st.write("**safe_slug:**", debug_info.get('safe_slug'))
             st.write("**material_dir:**", debug_info.get('material_dir'))
@@ -1063,12 +1092,36 @@ def main():
                     st.write("  (候補なし)")
             
             st.write("---")
-            st.write("**最終採用パス:**")
+            st.write("**最終採用パスと表示型:**")
+            # APP_VERSIONを取得（表示用）
+            try:
+                from material_map_version import APP_VERSION
+            except ImportError:
+                APP_VERSION = get_git_sha()
+            
             found = debug_info.get('found_paths', {})
             for key in ['primary', 'space', 'product']:
                 path = found.get(key) or image_paths.get(key)
                 if path:
-                    st.write(f"**{key}:** {path} ✅")
+                    # pathはPathオブジェクトまたは文字列の可能性がある
+                    if isinstance(path, Path):
+                        path_obj = path
+                        path_str = str(path)
+                    else:
+                        path_str = str(path)
+                        path_obj = Path(path_str)
+                    
+                    # 表示に渡した型を判定
+                    if path_obj.exists() and path_obj.is_file():
+                        display_type = "PIL (ローカルファイル)"
+                    elif path_str.startswith(('http://', 'https://')):
+                        display_type = f"URL (キャッシュバスター: ?v={APP_VERSION})"
+                    elif path_str.startswith('data:'):
+                        display_type = "data: URL"
+                    else:
+                        display_type = "不明"
+                    st.write(f"**{key}:** {path_str} ✅")
+                    st.write(f"  - 表示型: {display_type}")
                 else:
                     st.write(f"**{key}:** (見つかりませんでした) ❌")
         
@@ -1354,11 +1407,38 @@ def show_home():
                     
                     # サムネサイズで表示（プレースホルダー付き）
                     if image_source:
-                        # URLの場合はそのまま、PILImageの場合はBase64エンコード
-                        if isinstance(image_source, str):
-                            # URLの場合はキャッシュ回避のためタイムスタンプを追加
+                        # ローカルパス（Pathまたはstrでファイルがexists）の場合はPILImageとして扱う
+                        if isinstance(image_source, (Path, str)) and not str(image_source).startswith(('http://', 'https://', 'data:')):
+                            # ローカルファイルパスの場合
+                            path = Path(image_source) if isinstance(image_source, str) else image_source
+                            if path.exists() and path.is_file():
+                                # PILImageとして開いて表示（キャッシュバスター不要）
+                                pil_img = PILImage.open(path)
+                                if pil_img.mode != 'RGB':
+                                    if pil_img.mode in ('RGBA', 'LA', 'P'):
+                                        rgb_img = PILImage.new('RGB', pil_img.size, (255, 255, 255))
+                                        if pil_img.mode == 'RGBA':
+                                            rgb_img.paste(pil_img, mask=pil_img.split()[3])
+                                        elif pil_img.mode == 'LA':
+                                            rgb_img.paste(pil_img.convert('RGB'), mask=pil_img.split()[1])
+                                        else:
+                                            rgb_img = pil_img.convert('RGB')
+                                        pil_img = rgb_img
+                                    else:
+                                        pil_img = pil_img.convert('RGB')
+                                thumb_size = (120, 120)
+                                pil_img.thumbnail(thumb_size, PILImage.Resampling.LANCZOS)
+                                st.image(pil_img, width=120, use_container_width=False)
+                            else:
+                                display_image_unified(None, width=120, placeholder_size=(120, 120))
+                        elif isinstance(image_source, str) and image_source.startswith(('http://', 'https://')):
+                            # http/https URLの場合はキャッシュバスターを追加
+                            try:
+                                from material_map_version import APP_VERSION
+                            except ImportError:
+                                APP_VERSION = get_git_sha()
                             separator = "&" if "?" in image_source else "?"
-                            st.image(f"{image_source}{separator}_t={int(time.time())}", width=120, use_container_width=False)
+                            st.image(f"{image_source}{separator}v={APP_VERSION}", width=120, use_container_width=False)
                         else:
                             # PILImageの場合はBase64エンコードして直接表示（キャッシュ回避）
                             thumb_size = (120, 120)
@@ -1510,9 +1590,36 @@ def show_materials_list():
                 # 画像HTML（プレースホルダー含む、キャッシュ回避）
                 if image_source:
                     if isinstance(image_source, str):
-                        # URLの場合はキャッシュ回避のためタイムスタンプを追加
-                        separator = "&" if "?" in image_source else "?"
-                        img_html = f'<img src="{image_source}{separator}_t={int(time.time())}" class="material-hero-image" alt="{material_name}" />'
+                        # URLの場合はhttp/httpsのみキャッシュバスターを追加
+                        if image_source.startswith(('http://', 'https://')):
+                            try:
+                                from material_map_version import APP_VERSION
+                            except ImportError:
+                                APP_VERSION = get_git_sha()
+                            separator = "&" if "?" in image_source else "?"
+                            img_html = f'<img src="{image_source}{separator}v={APP_VERSION}" class="material-hero-image" alt="{material_name}" />'
+                        elif image_source.startswith('data:'):
+                            # data:URLの場合はそのまま
+                            img_html = f'<img src="{image_source}" class="material-hero-image" alt="{material_name}" />'
+                        else:
+                            # ローカルパスの場合はdata URLに変換
+                            path = Path(image_source)
+                            if path.exists() and path.is_file():
+                                with open(path, 'rb') as f:
+                                    img_bytes = f.read()
+                                    img_base64 = base64.b64encode(img_bytes).decode()
+                                    # 拡張子からMIMEタイプを判定
+                                    ext = path.suffix.lower()
+                                    mime_type = {
+                                        '.jpg': 'image/jpeg',
+                                        '.jpeg': 'image/jpeg',
+                                        '.png': 'image/png',
+                                        '.webp': 'image/webp',
+                                        '.gif': 'image/gif'
+                                    }.get(ext, 'image/png')
+                                    img_html = f'<img src="data:{mime_type};base64,{img_base64}" class="material-hero-image" alt="{material_name}" />'
+                            else:
+                                img_html = f'<div class="material-hero-image" style="display: flex; align-items: center; justify-content: center; color: #999; font-size: 14px;">画像なし</div>'
                     else:
                         # PILImageの場合はBase64エンコード（キャッシュ回避）
                         from io import BytesIO
@@ -1520,8 +1627,6 @@ def show_materials_list():
                         buffer = BytesIO()
                         image_source.save(buffer, format='PNG')
                         img_base64 = base64.b64encode(buffer.getvalue()).decode()
-                        # 画像のハッシュをキーとして使用（キャッシュ対策）
-                        img_hash = hashlib.md5(buffer.getvalue()).hexdigest()[:8]
                         img_html = f'<img src="data:image/png;base64,{img_base64}" class="material-hero-image" alt="{material_name}" />'
                 else:
                     # プレースホルダー
@@ -1716,11 +1821,39 @@ def show_search():
                         if material.images:
                             image_source = get_display_image_source(material.images[0], Path.cwd())
                         
-                        # 画像HTML（プレースホルダー含む）
+                        # 画像HTML（プレースホルダー含む、キャッシュ回避）
                         if image_source:
                             if isinstance(image_source, str):
-                                # URLの場合は直接使用
-                                img_html = f'<img src="{image_source}" class="material-hero-image" alt="{material.name}" />'
+                                # URLの場合はhttp/httpsのみキャッシュバスターを追加
+                                if image_source.startswith(('http://', 'https://')):
+                                    try:
+                                        from material_map_version import APP_VERSION
+                                    except ImportError:
+                                        APP_VERSION = get_git_sha()
+                                    separator = "&" if "?" in image_source else "?"
+                                    img_html = f'<img src="{image_source}{separator}v={APP_VERSION}" class="material-hero-image" alt="{material.name}" />'
+                                elif image_source.startswith('data:'):
+                                    # data:URLの場合はそのまま
+                                    img_html = f'<img src="{image_source}" class="material-hero-image" alt="{material.name}" />'
+                                else:
+                                    # ローカルパスの場合はdata URLに変換
+                                    path = Path(image_source)
+                                    if path.exists() and path.is_file():
+                                        with open(path, 'rb') as f:
+                                            img_bytes = f.read()
+                                            img_base64 = base64.b64encode(img_bytes).decode()
+                                            # 拡張子からMIMEタイプを判定
+                                            ext = path.suffix.lower()
+                                            mime_type = {
+                                                '.jpg': 'image/jpeg',
+                                                '.jpeg': 'image/jpeg',
+                                                '.png': 'image/png',
+                                                '.webp': 'image/webp',
+                                                '.gif': 'image/gif'
+                                            }.get(ext, 'image/png')
+                                            img_html = f'<img src="data:{mime_type};base64,{img_base64}" class="material-hero-image" alt="{material.name}" />'
+                                    else:
+                                        img_html = f'<div class="material-hero-image" style="display: flex; align-items: center; justify-content: center; color: #999; font-size: 14px;">画像なし</div>'
                             else:
                                 # PILImageの場合はBase64エンコード
                                 from io import BytesIO

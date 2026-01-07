@@ -11,6 +11,19 @@ from PIL import Image as PILImage
 from typing import Optional, Tuple, Union, Dict
 from utils.paths import resolve_path
 
+try:
+    from material_map_version import APP_VERSION
+except ImportError:
+    # フォールバック: git SHAを直接取得
+    import subprocess
+    try:
+        APP_VERSION = subprocess.check_output(
+            ["git", "rev-parse", "--short", "HEAD"],
+            stderr=subprocess.DEVNULL
+        ).decode("utf-8").strip()
+    except Exception:
+        APP_VERSION = "no-git"
+
 
 def get_display_image_source(
     image_record,
@@ -50,9 +63,13 @@ def get_display_image_source(
         # 例外時はurlをNoneのまま続行（アプリは落ちない）
         url = None
     
-    # URLがある場合はそれを返す
+    # URLがある場合はそれを返す（http/https URLのみ）
     if url:
-        return url
+        # http/https URLの場合はそのまま返す（キャッシュバスターはdisplay_image_unifiedで追加）
+        if url.startswith(('http://', 'https://')):
+            return url
+        # ローカルパス文字列の可能性がある場合は、後続の処理で判定
+        # （ここではURLとして扱わない）
     
     # まず、staticのjpgを最優先で探索（DBパスより優先）
     # image_recordがMaterialオブジェクトの場合、材料名から統一構成のパスを探索
@@ -402,7 +419,64 @@ def display_image_unified(
         if image_source:
             # URLまたはPILImageを表示（例外時もアプリは落ちない）
             try:
-                st.image(image_source, caption=caption, width=width, use_container_width=use_container_width)
+                # ローカルパス（Pathまたはstrでファイルがexists）の場合はPILImageとして扱う
+                # 重要: ローカルファイルパスには?v=を付けない（存在しないパスになるため）
+                if isinstance(image_source, Path):
+                    # Pathオブジェクトの場合は直接開く
+                    if image_source.exists() and image_source.is_file():
+                        pil_img = PILImage.open(image_source)
+                        # RGBモードに変換
+                        if pil_img.mode != 'RGB':
+                            if pil_img.mode in ('RGBA', 'LA', 'P'):
+                                rgb_img = PILImage.new('RGB', pil_img.size, (255, 255, 255))
+                                if pil_img.mode == 'RGBA':
+                                    rgb_img.paste(pil_img, mask=pil_img.split()[3])
+                                elif pil_img.mode == 'LA':
+                                    rgb_img.paste(pil_img.convert('RGB'), mask=pil_img.split()[1])
+                                else:
+                                    rgb_img = pil_img.convert('RGB')
+                                pil_img = rgb_img
+                            else:
+                                pil_img = pil_img.convert('RGB')
+                        st.image(pil_img, caption=caption, width=width, use_container_width=use_container_width)
+                    else:
+                        image_source = None
+                elif isinstance(image_source, str):
+                    # 文字列の場合、http/https/data:で始まるか、ローカルファイルかを判定
+                    if image_source.startswith(('http://', 'https://')):
+                        # http/https URLの場合はキャッシュバスターを追加
+                        separator = "&" if "?" in image_source else "?"
+                        image_source_with_cache = f"{image_source}{separator}v={APP_VERSION}"
+                        st.image(image_source_with_cache, caption=caption, width=width, use_container_width=use_container_width)
+                    elif image_source.startswith('data:'):
+                        # data:URLの場合はそのまま
+                        st.image(image_source, caption=caption, width=width, use_container_width=use_container_width)
+                    else:
+                        # ローカルファイルパスの可能性がある場合
+                        path = Path(image_source)
+                        if path.exists() and path.is_file():
+                            # PILImageとして開いて表示（キャッシュバスター不要）
+                            pil_img = PILImage.open(path)
+                            # RGBモードに変換
+                            if pil_img.mode != 'RGB':
+                                if pil_img.mode in ('RGBA', 'LA', 'P'):
+                                    rgb_img = PILImage.new('RGB', pil_img.size, (255, 255, 255))
+                                    if pil_img.mode == 'RGBA':
+                                        rgb_img.paste(pil_img, mask=pil_img.split()[3])
+                                    elif pil_img.mode == 'LA':
+                                        rgb_img.paste(pil_img.convert('RGB'), mask=pil_img.split()[1])
+                                    else:
+                                        rgb_img = pil_img.convert('RGB')
+                                    pil_img = rgb_img
+                                else:
+                                    pil_img = pil_img.convert('RGB')
+                            st.image(pil_img, caption=caption, width=width, use_container_width=use_container_width)
+                        else:
+                            # ファイルが存在しない場合はエラー
+                            image_source = None
+                else:
+                    # PILImageの場合はそのまま
+                    st.image(image_source, caption=caption, width=width, use_container_width=use_container_width)
             except Exception:
                 # 画像表示エラー時はプレースホルダーを表示（アプリは落ちない）
                 image_source = None
