@@ -305,7 +305,7 @@ def _sqlite_type_from_sqlalchemy_type(col_type) -> str:
 
 def migrate_sqlite_schema_if_needed(engine) -> None:
     """
-    SQLite DBのスキーマをSQLAlchemyモデルに合わせて自動補完（不足カラムを全部追加）
+    SQLite DBのスキーマをSQLAlchemyモデルに合わせて自動補完（全テーブルの不足カラムを全部追加）
     
     Args:
         engine: SQLAlchemyエンジン
@@ -327,31 +327,41 @@ def migrate_sqlite_schema_if_needed(engine) -> None:
         return
     
     try:
-        # PRAGMA table_info(materials) を取得
         conn = sqlite3.connect(str(p))
         cursor = conn.cursor()
-        cursor.execute("PRAGMA table_info(materials)")
-        existing_columns = {row[1] for row in cursor.fetchall()}  # row[1] = column name
+        
+        # Base.metadata.tables に含まれる全テーブルを走査
+        for table_name, table in Base.metadata.tables.items():
+            try:
+                # PRAGMA table_info(<table>) で既存列名を取得
+                cursor.execute(f"PRAGMA table_info({table_name})")
+                existing_columns = {row[1] for row in cursor.fetchall()}  # row[1] = column name
+                
+                # SQLAlchemy側に存在する列で、SQLite側に無いものを列挙
+                missing_columns = {}
+                for col in table.columns:
+                    col_name = col.name
+                    if col_name not in existing_columns:
+                        sqlite_type = _sqlite_type_from_sqlalchemy_type(col.type)
+                        missing_columns[col_name] = sqlite_type
+                
+                # 不足カラムを追加
+                if missing_columns:
+                    added = _sqlite_ensure_columns(str(p), table_name, missing_columns)
+                    if added:
+                        for col_name in added:
+                            col_type = missing_columns[col_name]
+                            print(f"[DB MIGRATE] {table_name}: add column {col_name} {col_type}")
+                else:
+                    print(f"[DB MIGRATE] {table_name}: No missing columns found")
+                    
+            except Exception as e:
+                # テーブル単位のエラーはログして継続（他のテーブルは処理を続ける）
+                print(f"[DB MIGRATE] {table_name}: Failed to migrate: {e}")
+                import traceback
+                traceback.print_exc()
+        
         conn.close()
-        
-        # Material.__table__.columns を見て「DBに無い列」を列挙
-        missing_columns = {}
-        
-        for col in Material.__table__.columns:
-            col_name = col.name
-            if col_name not in existing_columns:
-                sqlite_type = _sqlite_type_from_sqlalchemy_type(col.type)
-                missing_columns[col_name] = sqlite_type
-        
-        # 不足カラムを追加
-        if missing_columns:
-            added = _sqlite_ensure_columns(str(p), "materials", missing_columns)
-            if added:
-                for col_name, col_type in missing_columns.items():
-                    if col_name in added:
-                        print(f"[DB MIGRATE] add column: {col_name} {col_type}")
-        else:
-            print("[DB MIGRATE] No missing columns found")
             
     except Exception as e:
         # 起動を止めない（Cloudでログ確認できるようにする）

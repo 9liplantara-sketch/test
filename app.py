@@ -105,9 +105,6 @@ def run_app_entrypoint():
         _panic_screen("main()", e)
         # st.stop()は呼ばない（本文を表示するため）
 
-# 5) Streamlit 実行では __name__ ガードで事故ることがあるので、ガード無しで呼ぶ
-run_app_entrypoint()
-
 from material_form_detailed import show_detailed_material_form
 from periodic_table_ui import show_periodic_table
 from material_detail_tabs import show_material_detail_tabs
@@ -2268,5 +2265,7 @@ def show_material_cards():
             use_container_width=True
         )
 
-if __name__ == "__main__":
-    main()
+
+# --- すべての関数定義（main含む）が終わった一番最後に置く ---
+# Streamlit 実行では __name__ ガードで事故ることがあるので、ガード無しで呼ぶ
+run_app_entrypoint()
