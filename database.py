@@ -1,7 +1,7 @@
 """
 データベース設定とモデル定義（詳細仕様対応版）
 """
-from sqlalchemy import create_engine, Column, Integer, String, Float, Text, DateTime, ForeignKey, Boolean, UniqueConstraint, Index
+from sqlalchemy import create_engine, Column, Integer, String, Float, Text, DateTime, ForeignKey, Boolean, UniqueConstraint, Index, text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
 from datetime import datetime
@@ -61,7 +61,7 @@ class Material(Base):
     processing_methods = Column(Text)  # 加工方法（複数選択）（JSON文字列）
     processing_other = Column(String(255))  # その他（自由記述）
     equipment_level = Column(String(50), nullable=False)  # 必要設備レベル
-    prototyping_difficulty = Column(String(50), nullable=False)  # 試作難易度
+    prototyping_difficulty = Column(String(50), nullable=False, default="中", server_default="中")  # 試作難易度
     
     # 6. 用途・市場状態
     use_categories = Column(Text)  # 主用途カテゴリ（複数選択）（JSON文字列）
@@ -410,6 +410,27 @@ def init_db():
                     conn.commit()
             except Exception as e:
                 print(f"[DB MIGRATION] Failed to set default is_published: {e}")
+            
+            # 必須フィールドの空文字修正（既存DBの空文字をデフォルト値で埋める）
+            try:
+                with engine.connect() as conn:
+                    from sqlalchemy import text
+                    # prototyping_difficulty が NULL または空文字列の場合、"中" に補完
+                    conn.execute(text("""
+                        UPDATE materials
+                        SET prototyping_difficulty = '中'
+                        WHERE prototyping_difficulty IS NULL OR TRIM(prototyping_difficulty) = ''
+                    """))
+                    # equipment_level が NULL または空文字列の場合、"家庭/工房レベル" に補完
+                    conn.execute(text("""
+                        UPDATE materials
+                        SET equipment_level = '家庭/工房レベル'
+                        WHERE equipment_level IS NULL OR TRIM(equipment_level) = ''
+                    """))
+                    conn.commit()
+                    print("[DB MIGRATION] Fixed empty prototyping_difficulty and equipment_level")
+            except Exception as e:
+                print(f"[DB MIGRATION] Failed to fix empty required fields: {e}")
         except Exception as e:
             # 例外は握りつぶさずログ出して継続
             print(f"[DB MIGRATION] Error in migrate_sqlite_schema_if_needed: {e}")
