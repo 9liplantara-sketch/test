@@ -182,12 +182,6 @@ def show_detailed_material_form():
             if result.get("traceback"):
                 with st.expander("🔍 エラー詳細（デバッグ用）", expanded=False):
                     st.code(result["traceback"], language="python")
-            st.balloons()
-            st.rerun()
-        except Exception as e:
-            st.error(f"❌ エラーが発生しました: {str(e)}")
-            import traceback
-            st.code("".join(traceback.format_exception(type(e), e, e.__traceback__)), language="python")
 
 
 def show_layer1_form():
