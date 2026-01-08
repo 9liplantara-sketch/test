@@ -99,14 +99,26 @@ materials/{safe_slug}/uses/product.jpg
 ローカルで画像アセットの検証を行う場合：
 
 ```bash
-# 通常モード（警告のみ）
+# 通常モード（公開材料のみ、primary画像が必須）
 python scripts/verify_assets.py
 
-# Strictモード（local branch時はexists必須）
-python scripts/verify_assets.py --strict
+# 非公開材料も含めて検証
+VERIFY_INCLUDE_UNPUBLISHED=1 python scripts/verify_assets.py
+
+# デバッグ出力あり
+DEBUG=1 python scripts/verify_assets.py
 ```
 
-GitHub Actionsでも自動検証が実行されます（main push/PR時）。
+**検証内容:**
+- `primary`画像は必須（解決できない場合はFAIL）
+- `space/product`画像は任意（存在すればチェック、無くてもOK）
+- 実際の解決ロジック（`get_material_image_ref`）基準で検査
+- `safe_slug` / `legacy_jp` どちらで解決されてもOK
+
+**GitHub Actions:**
+- main push/PR時に自動検証が実行されます
+- `primary`画像が見つからない材料がある場合のみFAIL
+- `space/product`未登録はCIを落としません
 
 ### 必要なファイル
 

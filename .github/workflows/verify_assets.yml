@@ -20,12 +20,22 @@ jobs:
     
     - name: Install dependencies
       run: |
-        pip install -r requirements.txt
+        python -m pip install --upgrade pip
+        python -m pip install -r requirements.txt
+    
+    - name: Initialize database
+      run: |
+        python -c "from database import init_db; init_db()"
+      env:
+        DEBUG: "0"
+        INIT_SAMPLE_DATA: "0"
     
     - name: Verify assets
       run: |
-        python scripts/verify_assets.py --strict
+        python scripts/verify_assets.py
       env:
-        # ローカルファイルのみで検証（IMAGE_BASE_URLは未設定）
-        IMAGE_BASE_URL: ""
-
+        DEBUG: "0"
+        INIT_SAMPLE_DATA: "0"
+        VERIFY_INCLUDE_UNPUBLISHED: "0"
+        # IMAGE_BASE_URL は未設定（外部依存しない）
+        # IMAGE_VERSION は不要（検査では参照しない）
