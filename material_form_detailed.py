@@ -118,24 +118,24 @@ def _normalize_required(form_data: dict, existing=None) -> dict:
     for key, default in REQUIRED_DEFAULTS.items():
         v = d.get(key)
         
-        # 1) 未入力(None/"")なら…
         if v is None or (isinstance(v, str) and v.strip() == ""):
-            # 既存レコードがある更新時は「既存値を優先」
             if existing is not None:
                 cur = getattr(existing, key, None)
-                # 既存が埋まってるならそれを維持（Noneで上書きしない）
-                # 文字列の場合は空文字列でないことを確認、整数の場合はNoneでないことを確認
                 if cur is not None:
                     if isinstance(cur, str):
                         if cur.strip() != "":
-                            d.pop(key, None)  # ← 重要：Noneで上書きしない
+                            d.pop(key, None)
                             continue
                     else:
-                        # 整数などの場合はNoneでないことを確認
-                        d.pop(key, None)  # ← 重要：Noneで上書きしない
+                        # int/float/bool などは None でなければ有効（0もOK）
+                        d.pop(key, None)
                         continue
-            # 新規 or 既存も空ならデフォルトを入れる
+            
             d[key] = default
+    
+    # DEBUG時のみ補完結果をログ出力
+    if os.getenv("DEBUG", "0") == "1":
+        print(f"[DEBUG] _normalize_required: {d}")
     
     return d
 

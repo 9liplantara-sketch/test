@@ -2058,7 +2058,7 @@ def show_materials_list(include_unpublished: bool = False):
                         background-color: #1a1a1a !important;
                         color: #ffffff !important;
                         border: 1px solid #1a1a1a !important;
-                        margin-top: -15px !important;
+                        margin-top: -15pt !important;
                     }}
                     button[key="{button_key}"]:hover,
                     button[data-testid*="{button_key}"]:hover {{
