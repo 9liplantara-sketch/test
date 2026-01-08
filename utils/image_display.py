@@ -460,7 +460,8 @@ def display_image_unified(
     image_source: Optional[Union[str, Path, PILImage.Image]],
     caption: Optional[str] = None,
     width: Union[Literal["stretch", "content"], int, None] = "stretch",
-    debug: Optional[Dict] = None
+    debug: Optional[Dict] = None,
+    placeholder_size: Optional[Tuple[int, int]] = None
 ):
     """
     画像を統一的な方法で表示（URL/Path/PILImage対応）
@@ -470,11 +471,18 @@ def display_image_unified(
         caption: キャプション
         width: 幅（"stretch", "content", またはピクセル数）
         debug: デバッグ情報（DEBUG=1のときのみ表示）
+        placeholder_size: プレースホルダーのサイズ（幅, 高さ）のタプル。None画像の場合に使用
     """
     if image_source is None:
         # プレースホルダーを表示
+        if placeholder_size:
+            placeholder_width, placeholder_height = placeholder_size
+            placeholder_style = f"width: {placeholder_width}px; height: {placeholder_height}px;"
+        else:
+            placeholder_style = "width: 100%; height: 200px;"
+        
         st.markdown(
-            f'<div style="width: 100%; height: 200px; background: #f0f0f0; display: flex; align-items: center; justify-content: center; color: #666;">画像なし</div>',
+            f'<div style="{placeholder_style} background: #f0f0f0; display: flex; align-items: center; justify-content: center; color: #666;">画像なし</div>',
             unsafe_allow_html=True
         )
         # DEBUG=1のときのみdebug情報を表示

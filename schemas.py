@@ -1,8 +1,8 @@
 """
 Pydanticモデル（APIリクエスト/レスポンス用）
 """
-from pydantic import BaseModel
-from typing import Optional, List
+from pydantic import BaseModel, ConfigDict
+from typing import Optional, List, Any
 from datetime import datetime
 
 
@@ -117,4 +117,7 @@ class MaterialCardPayload(BaseModel):
 class MaterialCard(BaseModel):
     """素材カード用のデータモデル（DTOを受け取る）"""
     payload: MaterialCardPayload
+    material_obj: Optional[Any] = None  # Materialオブジェクト（画像取得のため）
+    
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 

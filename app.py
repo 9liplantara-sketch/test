@@ -2018,7 +2018,7 @@ def show_materials_list():
                 </div>
                 """, unsafe_allow_html=True)
                 
-                # ボタンのスタイルを明示的に設定（白文字を確実に表示）
+                # ボタンのスタイルを明示的に設定（白文字を確実に表示、上に15px移動）
                 button_key = f"detail_{material.id}"
                 st.markdown(f"""
                 <style>
@@ -2027,6 +2027,7 @@ def show_materials_list():
                         background-color: #1a1a1a !important;
                         color: #ffffff !important;
                         border: 1px solid #1a1a1a !important;
+                        margin-top: -15px !important;
                     }}
                     button[key="{button_key}"]:hover,
                     button[data-testid*="{button_key}"]:hover {{

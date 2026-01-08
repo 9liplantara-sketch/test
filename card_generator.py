@@ -94,21 +94,44 @@ def generate_material_card(card_data: MaterialCard) -> str:
         warnings.warn(f"card_generator: material_obj is None for material_id={payload.id}, using MaterialProxy")
         material_obj = MaterialProxy(payload)
     
-    # get_material_image_ref()を使用して画像srcを取得
+    # get_material_image_ref()を使用して画像srcを取得（primary/space/product）
     from utils.image_display import get_material_image_ref, to_data_url
-    image_src, image_debug = get_material_image_ref(material_obj, "primary", project_root=Path.cwd())
     
-    # image_srcがURLの場合はそのまま、Pathの場合はdata URLに変換
-    if image_src is None:
-        image_url = ""
-    elif isinstance(image_src, str):
-        image_url = image_src
-    elif isinstance(image_src, Path):
-        # HTMLカード生成の場合はdata URLに変換
-        data_url = to_data_url(image_src)
-        image_url = data_url or ""
-    else:
-        image_url = ""
+    # primary画像
+    primary_src, primary_debug = get_material_image_ref(material_obj, "primary", project_root=Path.cwd())
+    primary_url = ""
+    if primary_src is None:
+        primary_url = ""
+    elif isinstance(primary_src, str):
+        primary_url = primary_src
+    elif isinstance(primary_src, Path):
+        data_url = to_data_url(primary_src)
+        primary_url = data_url or ""
+    
+    # space画像
+    space_src, space_debug = get_material_image_ref(material_obj, "space", project_root=Path.cwd())
+    space_url = ""
+    if space_src is None:
+        space_url = ""
+    elif isinstance(space_src, str):
+        space_url = space_src
+    elif isinstance(space_src, Path):
+        data_url = to_data_url(space_src)
+        space_url = data_url or ""
+    
+    # product画像
+    product_src, product_debug = get_material_image_ref(material_obj, "product", project_root=Path.cwd())
+    product_url = ""
+    if product_src is None:
+        product_url = ""
+    elif isinstance(product_src, str):
+        product_url = product_src
+    elif isinstance(product_src, Path):
+        data_url = to_data_url(product_src)
+        product_url = data_url or ""
+    
+    # 後方互換性のため、primary_urlをimage_urlとしても使用
+    image_url = primary_url
     
     # 主要物性データの取得
     main_properties = properties[:8] if properties else []
@@ -278,6 +301,34 @@ def generate_material_card(card_data: MaterialCard) -> str:
                 font-size: 16px;
                 border: 2px dashed #ddd;
             }}
+            .use-examples-section {{
+                grid-column: 1 / -1;
+                margin-top: 20px;
+                padding-top: 30px;
+                border-top: 2px solid #e8e8e8;
+            }}
+            .use-examples-grid {{
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 30px;
+                margin-top: 20px;
+            }}
+            .use-example-item {{
+                text-align: center;
+            }}
+            .use-example-item h4 {{
+                color: {primary_color};
+                font-size: 16px;
+                font-weight: 600;
+                margin-bottom: 15px;
+            }}
+            .use-example-image {{
+                max-width: 100%;
+                max-height: 250px;
+                border-radius: 12px;
+                box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+                object-fit: cover;
+            }}
             .properties-section {{
                 background: linear-gradient(135deg, #f8f9ff 0%, #ffffff 100%);
                 padding: 30px;
@@ -426,6 +477,24 @@ def generate_material_card(card_data: MaterialCard) -> str:
                     ''' for prop in main_properties]) if main_properties else '<p style="color: #999; text-align: center; padding: 20px;">物性データが登録されていません</p>'}
                 </div>
             </div>
+            
+            {(f'''
+            <div class="use-examples-section">
+                <h3 style="color: {primary_color}; font-size: 24px; font-weight: 700; margin-bottom: 20px; border-bottom: 3px solid {primary_color}; padding-bottom: 15px;">📸 使用例</h3>
+                <div class="use-examples-grid">
+                    <div class="use-example-item">
+                        <h4>空間用途</h4>
+                        {f'<img src="{space_url}" alt="空間用途" class="use-example-image" onerror="this.style.display=\'none\'; this.nextElementSibling.style.display=\'block\';">' if space_url else ''}
+                        {f'<div class="no-image" style="{("display:none;" if space_url else "display:block;")} padding: 80px 20px; border-radius: 12px; background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%); color: #999; text-align: center; font-size: 14px; border: 2px dashed #ddd;">📷 画像なし</div>'}
+                    </div>
+                    <div class="use-example-item">
+                        <h4>製品用途</h4>
+                        {f'<img src="{product_url}" alt="製品用途" class="use-example-image" onerror="this.style.display=\'none\'; this.nextElementSibling.style.display=\'block\';">' if product_url else ''}
+                        {f'<div class="no-image" style="{("display:none;" if product_url else "display:block;")} padding: 80px 20px; border-radius: 12px; background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%); color: #999; text-align: center; font-size: 14px; border: 2px dashed #ddd;">📷 画像なし</div>'}
+                    </div>
+                </div>
+            </div>
+            ''' if (space_url or product_url) else '')}
             
             {f'''
             <div class="description-section">
