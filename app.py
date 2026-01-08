@@ -2203,8 +2203,11 @@ def show_search():
     
     search_query = st.text_input("検索キーワード", placeholder="材料名、カテゴリ、説明などで検索...", key="search_input")
     
+    # 管理者表示フラグを取得
+    include_unpublished = st.session_state.get("include_unpublished", False)
+    
     if search_query:
-        materials = get_all_materials()
+        materials = get_all_materials(include_unpublished=include_unpublished)
         results = []
         
         for material in materials:
