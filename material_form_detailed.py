@@ -5,6 +5,8 @@
 import streamlit as st
 import uuid
 import json
+import os
+import re
 from database import SessionLocal, Material, Property, Image, MaterialMetadata, ReferenceURL, UseExample, init_db
 
 
@@ -89,6 +91,46 @@ SAFETY_TAGS = [
 ]
 
 VISIBILITY_OPTIONS = ["公開（誰でも閲覧可）", "限定公開（ログインユーザーのみ）", "非公開（登録者/管理者のみ）", "不明"]
+
+
+# 必須フィールドのデフォルト値
+REQUIRED_DEFAULTS = {
+    "prototyping_difficulty": "中",
+    "equipment_level": "家庭/工房レベル",
+    "visibility": "公開（誰でも閲覧可）",
+    "is_published": 1,
+}
+
+
+def _normalize_required(form_data: dict, existing=None) -> dict:
+    """
+    必須フィールドの補完（None/空文字列をデフォルト値で埋める）
+    
+    Args:
+        form_data: フォームデータ
+        existing: 既存のMaterialオブジェクト（更新時）
+    
+    Returns:
+        補完済みのform_data
+    """
+    d = dict(form_data)
+    
+    for key, default in REQUIRED_DEFAULTS.items():
+        v = d.get(key)
+        
+        # 1) 未入力(None/"")なら…
+        if v is None or (isinstance(v, str) and v.strip() == ""):
+            # 既存レコードがある更新時は「既存値を優先」
+            if existing is not None:
+                cur = getattr(existing, key, None)
+                if cur is not None and (not isinstance(cur, str) or cur.strip() != ""):
+                    # 既存が埋まってるならそれを維持（Noneで上書きしない）
+                    d.pop(key, None)  # ← 重要：Noneで上書きしない
+                    continue
+            # 新規 or 既存も空ならデフォルトを入れる
+            d[key] = default
+    
+    return d
 
 
 def show_detailed_material_form():

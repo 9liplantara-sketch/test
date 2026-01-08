@@ -60,7 +60,7 @@ class Material(Base):
     # 5. 加工・実装条件
     processing_methods = Column(Text)  # 加工方法（複数選択）（JSON文字列）
     processing_other = Column(String(255))  # その他（自由記述）
-    equipment_level = Column(String(50), nullable=False)  # 必要設備レベル
+    equipment_level = Column(String(50), nullable=False, default="家庭/工房レベル", server_default="家庭/工房レベル")  # 必要設備レベル
     prototyping_difficulty = Column(String(50), nullable=False, default="中", server_default="中")  # 試作難易度
     
     # 6. 用途・市場状態
@@ -403,17 +403,16 @@ def init_db():
             
             # 既存データにis_published=1を設定（後方互換）
             try:
-                with engine.connect() as conn:
+                with engine.begin() as conn:
                     from sqlalchemy import text
                     # is_publishedカラムが存在する場合、NULLのレコードに1を設定
                     conn.execute(text("UPDATE materials SET is_published = 1 WHERE is_published IS NULL"))
-                    conn.commit()
             except Exception as e:
                 print(f"[DB MIGRATION] Failed to set default is_published: {e}")
             
             # 必須フィールドの空文字修正（既存DBの空文字をデフォルト値で埋める）
             try:
-                with engine.connect() as conn:
+                with engine.begin() as conn:
                     from sqlalchemy import text
                     # prototyping_difficulty が NULL または空文字列の場合、"中" に補完
                     conn.execute(text("""
@@ -427,7 +426,6 @@ def init_db():
                         SET equipment_level = '家庭/工房レベル'
                         WHERE equipment_level IS NULL OR TRIM(equipment_level) = ''
                     """))
-                    conn.commit()
                     print("[DB MIGRATION] Fixed empty prototyping_difficulty and equipment_level")
             except Exception as e:
                 print(f"[DB MIGRATION] Failed to fix empty required fields: {e}")

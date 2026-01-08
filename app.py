@@ -1690,61 +1690,34 @@ def show_home():
         </div>
         """, unsafe_allow_html=True)
     
-    # 強制画像テスト（一時診断用）
-    if materials:
-        st.markdown("---")
-        st.markdown("### 🔍 強制画像テスト（診断用）")
-        test_material = materials[0]
-        from utils.image_display import get_material_image_ref
-        test_src, test_debug = get_material_image_ref(test_material, "primary", Path.cwd())
-        
-        st.write(f"**テスト対象:** {test_material.name_official or test_material.name}")
-        st.write(f"**chosen_branch:** {test_debug.get('chosen_branch', 'N/A')}")
-        st.write(f"**final_src_type:** {test_debug.get('final_src_type', 'N/A')}")
-        
-        if test_src:
-            if isinstance(test_src, Path):
-                st.write(f"**Path:** {test_src.resolve()}")
-                st.write(f"**exists:** {test_src.exists()}")
-                st.write(f"**is_file:** {test_src.is_file()}")
-                if test_src.exists() and test_src.is_file():
-                    st.image(test_src, width=200, caption="Path直接表示テスト")
-            elif isinstance(test_src, str):
-                st.write(f"**URL:** {test_src}")
-                st.image(test_src, width=200, caption="URL直接表示テスト")
-        else:
-            st.warning("画像が見つかりませんでした")
-        
-        with st.expander("🔍 詳細デバッグ情報", expanded=True):
-            st.json(test_debug)
-    
-    # 強制画像テスト（一時診断用）
-    if materials:
-        st.markdown("---")
-        st.markdown("### 🔍 強制画像テスト（診断用）")
-        test_material = materials[0]
-        from utils.image_display import get_material_image_ref
-        test_src, test_debug = get_material_image_ref(test_material, "primary", Path.cwd())
-        
-        st.write(f"**テスト対象:** {test_material.name_official or test_material.name}")
-        st.write(f"**chosen_branch:** {test_debug.get('chosen_branch', 'N/A')}")
-        st.write(f"**final_src_type:** {test_debug.get('final_src_type', 'N/A')}")
-        
-        if test_src:
-            if isinstance(test_src, Path):
-                st.write(f"**Path:** {test_src.resolve()}")
-                st.write(f"**exists:** {test_src.exists()}")
-                st.write(f"**is_file:** {test_src.is_file()}")
-                if test_src.exists() and test_src.is_file():
-                    st.image(test_src, width=200, caption="Path直接表示テスト")
-            elif isinstance(test_src, str):
-                st.write(f"**URL:** {test_src}")
-                st.image(test_src, width=200, caption="URL直接表示テスト")
-        else:
-            st.warning("画像が見つかりませんでした")
-        
-        with st.expander("🔍 詳細デバッグ情報", expanded=True):
-            st.json(test_debug)
+    # 強制画像テスト（診断用：DEBUG=1時のみ、かつチェックボックスONのときだけ表示）
+    if os.getenv("DEBUG", "0") == "1" and materials:
+        if st.checkbox("🔍 診断: 強制画像テストを表示", value=False, key="dbg_force_img_test"):
+            st.markdown("---")
+            st.markdown("### 🔍 強制画像テスト（診断用）")
+            test_material = materials[0]
+            from utils.image_display import get_material_image_ref
+            test_src, test_debug = get_material_image_ref(test_material, "primary", Path.cwd())
+            
+            st.write(f"**テスト対象:** {test_material.name_official or test_material.name}")
+            st.write(f"**chosen_branch:** {test_debug.get('chosen_branch', 'N/A')}")
+            st.write(f"**final_src_type:** {test_debug.get('final_src_type', 'N/A')}")
+            
+            if test_src:
+                if isinstance(test_src, Path):
+                    st.write(f"**Path:** {test_src.resolve()}")
+                    st.write(f"**exists:** {test_src.exists()}")
+                    st.write(f"**is_file:** {test_src.is_file()}")
+                    if test_src.exists() and test_src.is_file():
+                        st.image(test_src, width=200, caption="Path直接表示テスト")
+                elif isinstance(test_src, str):
+                    st.write(f"**URL:** {test_src}")
+                    st.image(test_src, width=200, caption="URL直接表示テスト")
+            else:
+                st.warning("画像が見つかりませんでした")
+            
+            with st.expander("🔍 詳細デバッグ情報", expanded=True):
+                st.json(test_debug)
     
     # 最近登録された材料
     if materials:
