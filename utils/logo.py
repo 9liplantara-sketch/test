@@ -13,24 +13,27 @@ import os
 def get_logo_paths() -> Dict[str, Path]:
     """
     ロゴファイルのパスを取得（Unicode正規化対応）
+    プロジェクトルート基準で確実に解決
     
     Returns:
         dict: {"type_logo": Path, "mark": Path}
-        ファイルが見つからない場合は、存在しないPathを返す
+        ファイルが見つからない場合は、存在しないPathを返す（代替ロゴ生成はしない）
     """
-    # プロジェクトルートを取得（utils/logo.py から見て ../）
+    # プロジェクトルートを取得（utils/logo.py から見て2階層上）
+    # utils/logo.py -> utils/ -> プロジェクトルート
     project_root = Path(__file__).resolve().parent.parent
     
-    # ロゴディレクトリ
+    # ロゴディレクトリ（必ず logo/ を使用）
     logo_dir = project_root / "logo"
     
     # 期待するファイル名（NFKC正規化済み）
+    # 必ず logo/タイプロゴ.svg と logo/ロゴマーク.svg を使用
     expected_names = {
         "type_logo": unicodedata.normalize("NFKC", "タイプロゴ.svg"),
         "mark": unicodedata.normalize("NFKC", "ロゴマーク.svg")
     }
     
-    # 結果辞書
+    # 結果辞書（初期値は正規化されたファイル名のパス）
     result = {
         "type_logo": logo_dir / expected_names["type_logo"],
         "mark": logo_dir / expected_names["mark"]
@@ -194,17 +197,33 @@ def render_logo_mark(height_px: int = 72, debug: bool = False) -> Optional[str]:
         if svg_content:
             return render_svg_inline(svg_content, height_px, "site-mark")
     
-    # 見つからない場合
+    # 見つからない場合（代替ロゴ生成はしない、空表示でOK）
     if debug:
-        with st.expander("🔍 ロゴマークが見つかりません", expanded=False):
+        paths = get_logo_paths()
+        project_root = Path(__file__).resolve().parent.parent
+        logo_dir = project_root / "logo"
+        
+        st.sidebar.warning("⚠️ ロゴマークが見つかりません")
+        with st.sidebar.expander("🔍 デバッグ情報", expanded=False):
+            st.write(f"**プロジェクトルート**: `{project_root}`")
+            st.write(f"**logoディレクトリ**: `{logo_dir}`")
+            st.write(f"**存在**: {logo_dir.exists()}")
             st.write(f"**探したパス**: `{mark_path}`")
-            st.write(f"**存在**: {mark_path.exists()}")
-            if mark_path.parent.exists():
+            st.write(f"**ファイル存在**: {mark_path.exists()}")
+            if mark_path.exists():
+                st.write(f"**ファイルサイズ**: {mark_path.stat().st_size} bytes")
+                st.write(f"**更新時刻**: {mark_path.stat().st_mtime}")
+            
+            if logo_dir.exists() and logo_dir.is_dir():
                 st.write(f"**logoディレクトリ内のファイル**:")
-                logo_dir = mark_path.parent
-                svg_files = [f.name for f in logo_dir.iterdir() if f.is_file() and f.suffix.lower() == ".svg"]
-                for svg_file in svg_files[:20]:  # 先頭20件
-                    st.write(f"- {svg_file}")
+                svg_files = [f for f in logo_dir.iterdir() if f.is_file() and f.suffix.lower() == ".svg"]
+                if svg_files:
+                    for svg_file in svg_files[:20]:  # 先頭20件
+                        st.write(f"- {svg_file.name}")
+                else:
+                    st.write("（SVGファイルが見つかりません）")
+            
+            st.write(f"**期待するファイル名**: `{unicodedata.normalize('NFKC', 'ロゴマーク.svg')}`")
     
     return None
 

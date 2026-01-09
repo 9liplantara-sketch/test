@@ -1723,47 +1723,61 @@ def main():
     elif page == "投稿ステータス確認":
         show_submission_status()
 
+def resolve_home_main_visual() -> Optional[Path]:
+    """
+    ホームのメインビジュアル画像のパスを解決
+    「写真/メイン.webp」を優先し、WebPが読めない環境ではjpg/pngにフォールバック
+    
+    Returns:
+        見つかった画像のPath、見つからなければNone
+    """
+    # プロジェクトルートを取得（app.py から見て .）
+    project_root = Path(__file__).resolve().parent
+    
+    # 探索順（上から優先）
+    # 1. 写真/メイン.webp（正として扱う）
+    # 2. static/images/メイン.webp
+    # 3. 写真/メイン.jpg（WebP不可の環境用）
+    # 4. static/images/メイン.jpg
+    # 5. 写真/メイン.png
+    # 6. static/images/メイン.png
+    candidate_paths = [
+        project_root / "写真" / "メイン.webp",
+        project_root / "static" / "images" / "メイン.webp",
+        project_root / "写真" / "メイン.jpg",
+        project_root / "static" / "images" / "メイン.jpg",
+        project_root / "写真" / "メイン.png",
+        project_root / "static" / "images" / "メイン.png",
+    ]
+    
+    for path in candidate_paths:
+        if path.exists() and path.is_file():
+            return path
+    
+    return None
+
+
 def show_home():
     """ホームページ"""
     # デバッグモードかどうか
     is_debug = os.getenv("DEBUG", "0") == "1"
     
-    # ロゴマークとタイプロゴを表示
+    # ロゴマークとタイプロゴを表示（ホームでは常に表示）
     col1, col2 = st.columns([1, 4])
     with col1:
+        # ロゴマークを確実に描画（見つからない場合はNoneが返るが、表示は試みる）
         logo_mark_html = render_logo_mark(height_px=72, debug=is_debug)
         if logo_mark_html:
             st.markdown(logo_mark_html, unsafe_allow_html=True)
+        elif is_debug:
+            # DEBUG=1のときは空表示でも警告は出ているので、ここでは何もしない
+            pass
     
     with col2:
         st.markdown(render_site_header(subtitle="素材の可能性を探索するデータベース", debug=is_debug), unsafe_allow_html=True)
     
     # メイン.webpをメインビジュアルとして表示
-    # プロジェクトルートを推定（static/がある階層をルートとみなす）
-    app_file_path = Path(__file__).resolve()
-    project_root = app_file_path.parent
-    
-    # static/ディレクトリを探してプロジェクトルートを確定
-    current = app_file_path.parent
-    while current != current.parent:  # ルートディレクトリに到達するまで
-        static_dir = current / "static"
-        if static_dir.exists() and static_dir.is_dir():
-            project_root = current
-            break
-        current = current.parent
-    
-    # 優先順位でパスを探索
-    main_webp_paths = [
-        project_root / "static" / "images" / "メイン.webp",
-        project_root / "static" / "メイン.webp",
-        project_root / "メイン.webp",
-    ]
-    
-    main_webp_path = None
-    for path in main_webp_paths:
-        if path.exists() and path.is_file():
-            main_webp_path = path
-            break
+    main_webp_path = resolve_home_main_visual()
     
     # メイン.webpをメインビジュアルとして表示
     if main_webp_path:
@@ -1785,14 +1799,46 @@ def show_home():
         except Exception as e:
             if is_debug:
                 st.warning(f"メイン.webpの表示に失敗: {e}")
+        
+        # DEBUG=1のときは詳細情報を表示
+        if is_debug:
+            project_root = Path(__file__).resolve().parent
+            with st.expander("🔍 メインビジュアル画像の詳細", expanded=False):
+                st.write(f"**選ばれたパス**: `{main_webp_path}`")
+                if main_webp_path.exists():
+                    stat = main_webp_path.stat()
+                    st.write(f"**存在**: ✅")
+                    st.write(f"**ファイルサイズ**: {stat.st_size:,} bytes")
+                    st.write(f"**更新時刻**: {stat.st_mtime}")
+                    
+                    # WebPサポートチェック
+                    try:
+                        from PIL import features
+                        webp_supported = features.check("webp")
+                        st.write(f"**PIL WebPサポート**: {'✅ True' if webp_supported else '❌ False'}")
+                        if not webp_supported and main_webp_path.suffix.lower() == '.webp':
+                            st.warning("⚠️ WebPがサポートされていません。jpg/pngへのフォールバックを検討してください。")
+                    except Exception:
+                        st.write("**PIL WebPサポート**: チェック不可")
     elif is_debug:
         # 見つからない場合の警告（DEBUG=1の時のみ）
-        st.warning("⚠️ メイン.webpが見つかりません")
+        project_root = Path(__file__).resolve().parent
+        st.warning("⚠️ メインビジュアル画像が見つかりません")
         with st.expander("🔍 デバッグ情報", expanded=False):
             st.write(f"**プロジェクトルート**: `{project_root}`")
             st.write(f"**探したパス**:")
-            for path in main_webp_paths:
-                st.write(f"- `{path}` (存在: {path.exists()})")
+            candidate_paths = [
+                project_root / "写真" / "メイン.webp",
+                project_root / "static" / "images" / "メイン.webp",
+                project_root / "写真" / "メイン.jpg",
+                project_root / "static" / "images" / "メイン.jpg",
+                project_root / "写真" / "メイン.png",
+                project_root / "static" / "images" / "メイン.png",
+            ]
+            for path in candidate_paths:
+                exists = path.exists()
+                size = path.stat().st_size if exists else 0
+                st.write(f"- `{path}` (存在: {exists}, サイズ: {size:,} bytes)")
     
     # 管理者表示フラグを取得
     include_unpublished = st.session_state.get("include_unpublished", False)
