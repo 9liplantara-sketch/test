@@ -17,7 +17,7 @@ def get_build_sha() -> str:
     except Exception:
         return "unknown"
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Dict, Any
 from PIL import Image as PILImage
 import qrcode
 from io import BytesIO
@@ -34,7 +34,7 @@ from database import SessionLocal, Material, Property, Image, MaterialMetadata, 
 from material_form_detailed import _normalize_required
 from sqlalchemy.orm import selectinload
 from sqlalchemy import select, func
-from utils.logo import render_site_header, render_logo_mark, show_logo_debug_info
+from utils.logo import render_site_header, render_logo_mark, show_logo_debug_info, get_logo_debug_info, get_project_root
 
 # card_generatorとschemasのimport（循環インポート対策）
 # エラー情報をグローバル変数に保存（Debug欄で表示用）
@@ -1546,7 +1546,7 @@ def main():
             }
         </style>
         """, unsafe_allow_html=True)
-        st.warning("デバッグモード: CSSが無効化されています。表示が正常な場合、CSSが原因です。")
+        st.warning("デバッグモード: CSS（<style>注入）が無効化されています。ロゴ/画像描画は正常に実行されます。")
     
     # ヘッダー - WOTA風シンプル
     # 本文UIの開始（Debug sidebarはrun_app_entrypointで先に描画済み）
@@ -1723,32 +1723,51 @@ def main():
     elif page == "投稿ステータス確認":
         show_submission_status()
 
-def resolve_home_main_visual() -> Optional[Path]:
+def resolve_home_main_visual(project_root: Optional[Path] = None) -> Optional[Path]:
     """
     ホームのメインビジュアル画像のパスを解決
     「写真/メイン.webp」を優先し、WebPが読めない環境ではjpg/pngにフォールバック
+    webp非対応ならwebp候補はスキップ
+    
+    Args:
+        project_root: プロジェクトルート（Noneの場合は自動解決）
     
     Returns:
         見つかった画像のPath、見つからなければNone
     """
-    # プロジェクトルートを取得（app.py から見て .）
-    project_root = Path(__file__).resolve().parent
+    if project_root is None:
+        # utils/logo.pyのget_project_root()を使用
+        project_root = get_project_root()
+    
+    # WebPサポートチェック
+    webp_supported = False
+    try:
+        from PIL import features
+        webp_supported = features.check("webp")
+    except Exception:
+        pass
     
     # 探索順（上から優先）
-    # 1. 写真/メイン.webp（正として扱う）
-    # 2. static/images/メイン.webp
-    # 3. 写真/メイン.jpg（WebP不可の環境用）
-    # 4. static/images/メイン.jpg
-    # 5. 写真/メイン.png
-    # 6. static/images/メイン.png
-    candidate_paths = [
-        project_root / "写真" / "メイン.webp",
-        project_root / "static" / "images" / "メイン.webp",
+    # webp非対応ならwebp候補はスキップ
+    candidate_paths = []
+    
+    if webp_supported:
+        # WebP対応時のみWebP候補を追加
+        candidate_paths.extend([
+            project_root / "写真" / "メイン.webp",
+            project_root / "static" / "images" / "メイン.webp",
+            project_root / "static" / "メイン.webp",
+        ])
+    
+    # jpg/pngは常に探索
+    candidate_paths.extend([
         project_root / "写真" / "メイン.jpg",
         project_root / "static" / "images" / "メイン.jpg",
+        project_root / "static" / "メイン.jpg",
         project_root / "写真" / "メイン.png",
         project_root / "static" / "images" / "メイン.png",
-    ]
+        project_root / "static" / "メイン.png",
+    ])
     
     for path in candidate_paths:
         if path.exists() and path.is_file():
@@ -1757,88 +1776,141 @@ def resolve_home_main_visual() -> Optional[Path]:
     return None
 
 
+def get_main_visual_debug_info() -> Dict[str, Any]:
+    """
+    メインビジュアル画像のデバッグ情報を辞書形式で返す（DEBUG表示用）
+    
+    Returns:
+        デバッグ情報の辞書
+    """
+    project_root = get_project_root()
+    
+    # WebPサポートチェック
+    webp_supported = False
+    try:
+        from PIL import features
+        webp_supported = features.check("webp")
+    except Exception:
+        pass
+    
+    # 探索順（上から優先、webp非対応ならwebp候補はスキップ）
+    candidate_paths = []
+    
+    if webp_supported:
+        # WebP対応時のみWebP候補を追加
+        candidate_paths.extend([
+            project_root / "写真" / "メイン.webp",
+            project_root / "static" / "images" / "メイン.webp",
+            project_root / "static" / "メイン.webp",
+        ])
+    
+    # jpg/pngは常に探索
+    candidate_paths.extend([
+        project_root / "写真" / "メイン.jpg",
+        project_root / "static" / "images" / "メイン.jpg",
+        project_root / "static" / "メイン.jpg",
+        project_root / "写真" / "メイン.png",
+        project_root / "static" / "images" / "メイン.png",
+        project_root / "static" / "メイン.png",
+    ])
+    
+    # 各候補の存在確認
+    candidates = []
+    for path in candidate_paths:
+        exists = path.exists() and path.is_file()
+        candidates.append({
+            "path": str(path),
+            "exists": exists,
+            "size": path.stat().st_size if exists else 0,
+            "mtime": path.stat().st_mtime if exists else 0,
+        })
+    
+    # 最終的に選ばれたパス
+    selected_path = resolve_home_main_visual(project_root)
+    
+    return {
+        "project_root": str(project_root),
+        "pil_webp_supported": webp_supported,
+        "candidates": candidates,
+        "selected_path": str(selected_path) if selected_path else None,
+        "selected_exists": selected_path.exists() if selected_path else False,
+        "selected_size": selected_path.stat().st_size if selected_path and selected_path.exists() else 0,
+        "selected_mtime": selected_path.stat().st_mtime if selected_path and selected_path.exists() else 0,
+    }
+
+
 def show_home():
     """ホームページ"""
     # デバッグモードかどうか
     is_debug = os.getenv("DEBUG", "0") == "1"
     
+    # 修正1: DEBUGモードでもロゴ/画像描画は必ず実行（CSS無効化は<style>注入だけ）
     # ロゴマークとタイプロゴを表示（ホームでは常に表示）
+    # st.components.v1.htmlを使用して確実に表示
     col1, col2 = st.columns([1, 4])
     with col1:
-        # ロゴマークを確実に描画（見つからない場合はNoneが返るが、表示は試みる）
-        logo_mark_html = render_logo_mark(height_px=72, debug=is_debug)
-        if logo_mark_html:
-            st.markdown(logo_mark_html, unsafe_allow_html=True)
-        elif is_debug:
-            # DEBUG=1のときは空表示でも警告は出ているので、ここでは何もしない
-            pass
+        # ロゴマークを確実に描画（st.components.v1.htmlで直接描画）
+        render_logo_mark(height_px=72, debug=is_debug, use_component=True)
     
     with col2:
-        st.markdown(render_site_header(subtitle="素材の可能性を探索するデータベース", debug=is_debug), unsafe_allow_html=True)
+        # タイプロゴとサブタイトルを描画（st.components.v1.htmlで直接描画）
+        render_site_header(subtitle="素材の可能性を探索するデータベース", debug=is_debug, use_component=True)
+    
+    # 修正2: components描画スモークテスト（DEBUG=1時のみ）
+    if is_debug:
+        import streamlit.components.v1 as components
+        components.html(
+            "<div style='padding:6px;border:1px solid #f00;background:#fff;'>components ok</div>",
+            height=40,
+            scrolling=False
+        )
+    
+    # 修正3,4: DEBUG=1のときは診断情報をst.jsonで表示（CSS無効でも読める）
+    if is_debug:
+        st.markdown("---")
+        st.markdown("### 🔍 デバッグ情報（CSS無効でも表示）")
+        
+        # ロゴデバッグ情報
+        logo_debug = get_logo_debug_info()
+        
+        # メインビジュアルデバッグ情報
+        main_visual_debug = get_main_visual_debug_info()
+        
+        st.json({
+            "logo_debug": logo_debug,
+            "main_visual_debug": main_visual_debug,
+        })
+        
+        st.markdown("---")
     
     # メイン.webpをメインビジュアルとして表示
+    # CSS無効化の影響を受けないよう、ロゴ/画像描画は常に同じコードパス
     main_webp_path = resolve_home_main_visual()
     
     # メイン.webpをメインビジュアルとして表示
     if main_webp_path:
         try:
             from utils.image_display import display_image_unified
-            st.markdown("""
-            <style>
-                .main-visual {
-                    border-radius: 12px;
-                    margin-top: 12px;
-                    margin-bottom: 24px;
-                    overflow: hidden;
-                }
-            </style>
-            """, unsafe_allow_html=True)
+            
+            # CSSはDEBUG=1のときだけ無効化（<style>挿入だけ止める）
+            if not is_debug:
+                st.markdown("""
+                <style>
+                    .main-visual {
+                        border-radius: 12px;
+                        margin-top: 12px;
+                        margin-bottom: 24px;
+                        overflow: hidden;
+                    }
+                </style>
+                """, unsafe_allow_html=True)
+            
             st.markdown('<div class="main-visual">', unsafe_allow_html=True)
             display_image_unified(main_webp_path, width="stretch")
             st.markdown('</div>', unsafe_allow_html=True)
         except Exception as e:
             if is_debug:
                 st.warning(f"メイン.webpの表示に失敗: {e}")
-        
-        # DEBUG=1のときは詳細情報を表示
-        if is_debug:
-            project_root = Path(__file__).resolve().parent
-            with st.expander("🔍 メインビジュアル画像の詳細", expanded=False):
-                st.write(f"**選ばれたパス**: `{main_webp_path}`")
-                if main_webp_path.exists():
-                    stat = main_webp_path.stat()
-                    st.write(f"**存在**: ✅")
-                    st.write(f"**ファイルサイズ**: {stat.st_size:,} bytes")
-                    st.write(f"**更新時刻**: {stat.st_mtime}")
-                    
-                    # WebPサポートチェック
-                    try:
-                        from PIL import features
-                        webp_supported = features.check("webp")
-                        st.write(f"**PIL WebPサポート**: {'✅ True' if webp_supported else '❌ False'}")
-                        if not webp_supported and main_webp_path.suffix.lower() == '.webp':
-                            st.warning("⚠️ WebPがサポートされていません。jpg/pngへのフォールバックを検討してください。")
-                    except Exception:
-                        st.write("**PIL WebPサポート**: チェック不可")
-    elif is_debug:
-        # 見つからない場合の警告（DEBUG=1の時のみ）
-        project_root = Path(__file__).resolve().parent
-        st.warning("⚠️ メインビジュアル画像が見つかりません")
-        with st.expander("🔍 デバッグ情報", expanded=False):
-            st.write(f"**プロジェクトルート**: `{project_root}`")
-            st.write(f"**探したパス**:")
-            candidate_paths = [
-                project_root / "写真" / "メイン.webp",
-                project_root / "static" / "images" / "メイン.webp",
-                project_root / "写真" / "メイン.jpg",
-                project_root / "static" / "images" / "メイン.jpg",
-                project_root / "写真" / "メイン.png",
-                project_root / "static" / "images" / "メイン.png",
-            ]
-            for path in candidate_paths:
-                exists = path.exists()
-                size = path.stat().st_size if exists else 0
-                st.write(f"- `{path}` (存在: {exists}, サイズ: {size:,} bytes)")
     
     # 管理者表示フラグを取得
     include_unpublished = st.session_state.get("include_unpublished", False)
