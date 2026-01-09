@@ -27,10 +27,14 @@ import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime, timedelta
 from collections import Counter
+import json
+import uuid
 
-from database import SessionLocal, Material, Property, Image, MaterialMetadata, ReferenceURL, UseExample, ProcessExampleImage, init_db
+from database import SessionLocal, Material, Property, Image, MaterialMetadata, ReferenceURL, UseExample, ProcessExampleImage, MaterialSubmission, init_db
+from material_form_detailed import _normalize_required
 from sqlalchemy.orm import selectinload
 from sqlalchemy import select, func
+from utils.logo import render_site_header, render_logo_mark, show_logo_debug_info
 
 # card_generatorとschemasのimport（循環インポート対策）
 # エラー情報をグローバル変数に保存（Debug欄で表示用）
@@ -685,6 +689,62 @@ def get_custom_css():
         color: #1a1a1a;
         font-weight: 600;
     }}
+    
+    /* サイトヘッダー（ロゴ表示用） */
+    .site-header {{
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-top: 4px;
+        margin-bottom: 12px;
+    }}
+    
+    .site-logo svg {{
+        height: 36px;
+        width: auto;
+        vertical-align: middle;
+    }}
+    
+    .site-mark svg {{
+        height: 96px;
+        width: auto;
+        vertical-align: middle;
+    }}
+    
+    .site-logo-fallback {{
+        font-size: 36px;
+        font-weight: 600;
+        color: #1a1a1a;
+    }}
+    
+    .site-subtitle {{
+        font-size: 14px;
+        color: #666;
+        margin-left: 12px;
+        line-height: 36px;
+    }}
+    
+    /* モバイル対応（画面幅が小さい場合） */
+    @media (max-width: 768px) {{
+        .site-header {{
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 8px;
+        }}
+        
+        .site-logo svg {{
+            height: 28px;
+        }}
+        
+        .site-mark svg {{
+            height: 72px;
+        }}
+        
+        .site-subtitle {{
+            margin-left: 0;
+            line-height: 1.4;
+        }}
+    }}
 </style>
 """
 
@@ -769,13 +829,14 @@ def get_db():
     """データベースセッションを取得"""
     return SessionLocal()
 
-def get_all_materials(include_unpublished: bool = False):
+def get_all_materials(include_unpublished: bool = False, include_deleted: bool = False):
     """
     全材料を取得（Eager Loadでリレーションも先読み・全リレーション網羅）
     重複を除去して返す（DB由来のデータに一本化）
     
     Args:
         include_unpublished: Trueの場合、非公開（is_published=0）も含める
+        include_deleted: Trueの場合、論理削除済み（is_deleted=1）も含める
     
     OperationalErrorをキャッチしてUI崩壊を防ぐ
     """
@@ -794,17 +855,15 @@ def get_all_materials(include_unpublished: bool = False):
             )
         )
         
+        # is_deletedフィルタ（デフォルトで削除されていないもののみ）
+        if not include_deleted:
+            if hasattr(Material, 'is_deleted'):
+                stmt = stmt.filter(Material.is_deleted == 0)
+        
         # is_publishedフィルタ（デフォルトで公開のみ）
         if not include_unpublished:
             if hasattr(Material, 'is_published'):
                 stmt = stmt.filter(Material.is_published == 1)
-        
-        # is_deletedフィルタ（削除済みは除外、管理者表示ONなら含めても良い）
-        if hasattr(Material, 'is_deleted'):
-            if not include_unpublished:
-                # 通常表示：削除済みは除外
-                stmt = stmt.filter(Material.is_deleted == 0)
-            # 管理者表示ONの場合は削除済みも含める（フィルタしない）
         
         stmt = stmt.order_by(Material.created_at.desc() if hasattr(Material, 'created_at') else Material.id.desc())
         
@@ -1394,6 +1453,11 @@ def main():
     if "debug_sidebar_rendered" not in st.session_state:
         try:
             render_debug_sidebar_early()
+            # ロゴファイルのデバッグ情報を表示（DEBUG=1の時のみ）
+            try:
+                show_logo_debug_info()
+            except Exception as e:
+                st.sidebar.warning(f"ロゴデバッグ情報の表示に失敗: {e}")
             st.session_state["debug_sidebar_rendered"] = True
         except Exception as e:
             _panic_screen("render_debug_sidebar_early in main()", e)
@@ -1485,8 +1549,7 @@ def main():
     
     # ヘッダー - WOTA風シンプル
     # 本文UIの開始（Debug sidebarはrun_app_entrypointで先に描画済み）
-    st.markdown('<h1 class="main-header">Material Map</h1>', unsafe_allow_html=True)
-    st.markdown('<p style="text-align: left; color: #666; font-size: 0.95rem; margin-bottom: 3rem; font-weight: 400; letter-spacing: 0.01em;">素材の可能性を探索するデータベース</p>', unsafe_allow_html=True)
+    # タイトルは各ページでロゴとして表示（show_home()など）
     
     # 素材件数の表示（エラーハンドリング付き）
     try:
@@ -1518,24 +1581,60 @@ def main():
         </div>
         """, unsafe_allow_html=True)
         
+        # 管理者表示チェック（DEBUG=1 or ADMIN=1のときのみ）
+        is_admin = os.getenv("DEBUG", "0") == "1" or os.getenv("ADMIN", "0") == "1"
+        
         # ページ選択（詳細ページ表示中は選択を変更しない）
         if st.session_state.selected_material_id:
             # 詳細ページ表示中は、ページ選択を一時的に無効化
             st.session_state.page = "材料一覧"
             page = "材料一覧"
         else:
+            # 管理者の場合は「承認待ち一覧」を追加
+            page_options = ["ホーム", "材料一覧", "材料登録", "ダッシュボード", "検索", "素材カード", "元素周期表"]
+            if is_admin:
+                page_options.append("承認待ち一覧")
+            
             page = st.radio(
                 "ページを選択",
-                ["ホーム", "材料一覧", "材料登録", "ダッシュボード", "検索", "素材カード", "元素周期表"],
-                index=["ホーム", "材料一覧", "材料登録", "ダッシュボード", "検索", "素材カード", "元素周期表"].index(st.session_state.page) if st.session_state.page in ["ホーム", "材料一覧", "材料登録", "ダッシュボード", "検索", "素材カード", "元素周期表"] else 0,
+                page_options,
+                index=page_options.index(st.session_state.page) if st.session_state.page in page_options else 0,
                 label_visibility="collapsed"
             )
             st.session_state.page = page
         
         st.markdown("---")
         
-        # 管理者表示チェック（DEBUG=1 or ADMIN=1のときのみ）
-        is_admin = os.getenv("DEBUG", "0") == "1" or os.getenv("ADMIN", "0") == "1"
+        # 管理者認証（ADMIN_PASSWORD）
+        admin_password = os.getenv("ADMIN_PASSWORD", "")
+        if admin_password:
+            # セッション状態で認証状態を管理
+            if "admin_authenticated" not in st.session_state:
+                st.session_state["admin_authenticated"] = False
+            
+            if not st.session_state["admin_authenticated"]:
+                st.markdown("---")
+                st.markdown("### 🔐 管理者認証")
+                password_input = st.text_input(
+                    "管理者パスワード",
+                    type="password",
+                    key="admin_password_input"
+                )
+                if st.button("認証", key="admin_auth_button"):
+                    if password_input == admin_password:
+                        st.session_state["admin_authenticated"] = True
+                        st.success("✅ 認証成功")
+                        st.rerun()
+                    else:
+                        st.error("❌ パスワードが正しくありません")
+                # 認証されていない場合は管理者機能を無効化
+                is_admin = False
+            else:
+                if st.button("🔓 ログアウト", key="admin_logout"):
+                    st.session_state["admin_authenticated"] = False
+                    st.rerun()
+        
+        # 管理者表示チェック（既に上で定義済み）
         if is_admin:
             include_unpublished = st.checkbox(
                 "管理者表示（非公開も表示）",
@@ -1547,7 +1646,8 @@ def main():
             include_unpublished = False
         
         # 統計情報（画面左下に小さく表示）
-        materials = get_all_materials(include_unpublished=include_unpublished)
+        include_deleted = st.session_state.get("include_deleted", False) if is_admin else False
+        materials = get_all_materials(include_unpublished=include_unpublished, include_deleted=include_deleted)
         
         # SQLで直接カウント（DetachedInstanceError回避）
         db = get_db()
@@ -1587,12 +1687,13 @@ def main():
     
     # 管理者表示フラグを取得
     include_unpublished = st.session_state.get("include_unpublished", False)
+    include_deleted = st.session_state.get("include_deleted", False) if is_admin else False
     
     # ページルーティング
     if page == "ホーム":
         show_home()
     elif page == "材料一覧":
-        show_materials_list(include_unpublished=include_unpublished)
+        show_materials_list(include_unpublished=include_unpublished, include_deleted=include_deleted)
     elif page == "材料登録":
         # 編集モードの場合はmaterial_idを渡す
         edit_material_id = st.session_state.get("edit_material_id")
@@ -1612,9 +1713,28 @@ def main():
         show_material_cards()
     elif page == "元素周期表":
         show_periodic_table()
+    elif page == "承認待ち一覧":
+        # 管理者のみアクセス可能
+        if is_admin:
+            show_approval_queue()
+        else:
+            st.error("❌ このページは管理者のみアクセス可能です。")
+    elif page == "投稿ステータス確認":
+        show_submission_status()
 
 def show_home():
     """ホームページ"""
+    # ロゴマークとタイプロゴを表示
+    col1, col2 = st.columns([1, 4])
+    with col1:
+        logo_mark_html = render_logo_mark(height_px=96)
+        if logo_mark_html:
+            st.markdown(logo_mark_html, unsafe_allow_html=True)
+    
+    with col2:
+        is_debug = os.getenv("DEBUG", "0") == "1"
+        st.markdown(render_site_header(subtitle="素材の可能性を探索するデータベース", debug=is_debug), unsafe_allow_html=True)
+    
     # 管理者表示フラグを取得
     include_unpublished = st.session_state.get("include_unpublished", False)
     materials = get_all_materials(include_unpublished=include_unpublished)
@@ -1863,8 +1983,10 @@ def show_home():
             </div>
             """, unsafe_allow_html=True)
 
-def show_materials_list(include_unpublished: bool = False):
+def show_materials_list(include_unpublished: bool = False, include_deleted: bool = False):
     """材料一覧ページ"""
+    is_debug = os.getenv("DEBUG", "0") == "1"
+    st.markdown(render_site_header(debug=is_debug), unsafe_allow_html=True)
     st.markdown('<h2 class="section-title">材料一覧</h2>', unsafe_allow_html=True)
     
     # 詳細表示モードのチェック
@@ -1934,7 +2056,7 @@ def show_materials_list(include_unpublished: bool = False):
             st.error("材料が見つかりませんでした。")
             st.session_state.selected_material_id = None
     
-    materials = get_all_materials(include_unpublished=include_unpublished)
+    materials = get_all_materials(include_unpublished=include_unpublished, include_deleted=include_deleted)
     
     if not materials:
         st.info("まだ材料が登録されていません。「材料登録」から材料を追加してください。")
@@ -2195,6 +2317,8 @@ def show_materials_list(include_unpublished: bool = False):
 
 def show_dashboard():
     """ダッシュボードページ"""
+    is_debug = os.getenv("DEBUG", "0") == "1"
+    st.markdown(render_site_header(debug=is_debug), unsafe_allow_html=True)
     st.markdown('<h2 class="section-title">ダッシュボード</h2>', unsafe_allow_html=True)
     
     # 管理者表示フラグを取得
@@ -2288,6 +2412,8 @@ def show_dashboard():
 
 def show_search():
     """検索ページ"""
+    is_debug = os.getenv("DEBUG", "0") == "1"
+    st.markdown(render_site_header(debug=is_debug), unsafe_allow_html=True)
     st.markdown('<h2 class="section-title">材料検索</h2>', unsafe_allow_html=True)
     
     search_query = st.text_input("検索キーワード", placeholder="材料名、カテゴリ、説明などで検索...", key="search_input")
@@ -2442,8 +2568,651 @@ def show_search():
         else:
             st.info("検索結果が見つかりませんでした。別のキーワードで検索してみてください。")
 
+def show_approval_queue():
+    """承認待ち一覧ページ（管理者のみ）"""
+    is_debug = os.getenv("DEBUG", "0") == "1"
+    st.markdown(render_site_header(debug=is_debug), unsafe_allow_html=True)
+    st.markdown('<h2 class="section-title">📋 承認待ち一覧</h2>', unsafe_allow_html=True)
+    
+    db = SessionLocal()
+    try:
+        # フィルタ：rejectedも表示するか
+        show_rejected = st.checkbox(
+            "却下済みも表示",
+            value=st.session_state.get("approval_show_rejected", False),
+            key="approval_show_rejected"
+        )
+        st.session_state["approval_show_rejected"] = show_rejected
+        
+        # 検索：name_official部分一致
+        search_query = st.text_input(
+            "材料名で検索（部分一致）",
+            value=st.session_state.get("approval_search", ""),
+            key="approval_search"
+        )
+        st.session_state["approval_search"] = search_query
+        
+        # ステータスフィルタ
+        if show_rejected:
+            status_filter = ["pending", "rejected"]
+        else:
+            status_filter = ["pending"]
+        
+        # submissionsを取得（新しい順）
+        query = db.query(MaterialSubmission).filter(
+            MaterialSubmission.status.in_(status_filter)
+        )
+        
+        # 検索フィルタ
+        if search_query and search_query.strip():
+            # payload_jsonにname_officialが含まれるものを検索
+            # SQLiteではJSON検索が難しいので、全件取得してフィルタ
+            all_submissions = query.order_by(MaterialSubmission.created_at.desc()).all()
+            filtered_submissions = []
+            for sub in all_submissions:
+                try:
+                    payload = json.loads(sub.payload_json)
+                    name_official = payload.get('name_official', '')
+                    if search_query.lower() in name_official.lower():
+                        filtered_submissions.append(sub)
+                except:
+                    pass
+            submissions = filtered_submissions
+        else:
+            submissions = query.order_by(MaterialSubmission.created_at.desc()).all()
+        
+        # ステータス別の件数表示
+        pending_count = len([s for s in submissions if s.status == "pending"])
+        rejected_count = len([s for s in submissions if s.status == "rejected"])
+        approved_count = len([s for s in submissions if s.status == "approved"])
+        
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("承認待ち", pending_count)
+        with col2:
+            st.metric("却下済み", rejected_count)
+        with col3:
+            st.metric("承認済み", approved_count)
+        
+        if not submissions:
+            st.info("✅ 該当する投稿はありません。")
+            return
+        
+        for submission in submissions:
+            # ステータスに応じたアイコンと色
+            status_icon = {
+                "pending": "⏳",
+                "approved": "✅",
+                "rejected": "❌"
+            }.get(submission.status, "📄")
+            
+            status_color = {
+                "pending": "#FFA500",
+                "approved": "#28A745",
+                "rejected": "#DC3545"
+            }.get(submission.status, "#666")
+            
+            with st.expander(
+                f"{status_icon} {submission.created_at.strftime('%Y-%m-%d %H:%M')} - {submission.submitted_by or '匿名'} - {submission.status}",
+                expanded=False
+            ):
+                # payload_jsonをパースして表示
+                try:
+                    payload = json.loads(submission.payload_json)
+                    st.markdown("### 投稿内容")
+                    
+                    # 主要フィールドを表示
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.write(f"**材料名（正式）**: {payload.get('name_official', 'N/A')}")
+                        st.write(f"**カテゴリ**: {payload.get('category_main', 'N/A')}")
+                        st.write(f"**供給元**: {payload.get('supplier_org', 'N/A')}")
+                    with col2:
+                        st.write(f"**投稿者**: {submission.submitted_by or '匿名'}")
+                        st.write(f"**投稿日時**: {submission.created_at.strftime('%Y-%m-%d %H:%M:%S')}")
+                        st.markdown(f"**ステータス**: <span style='color: {status_color}'>{submission.status}</span>", unsafe_allow_html=True)
+                        if submission.approved_material_id:
+                            st.write(f"**承認済み材料ID**: {submission.approved_material_id}")
+                    
+                    # editor_noteを表示・編集
+                    st.markdown("---")
+                    st.markdown("### 編集者メモ")
+                    editor_note_key = f"editor_note_edit_{submission.id}"
+                    editor_note_value = st.text_area(
+                        "編集者メモ（いつでも編集可能）",
+                        value=submission.editor_note or "",
+                        key=editor_note_key,
+                        placeholder="編集者メモを入力・編集できます"
+                    )
+                    if st.button("💾 メモを保存", key=f"save_note_{submission.id}"):
+                        submission.editor_note = editor_note_value.strip() if editor_note_value.strip() else None
+                        db.commit()
+                        st.success("✅ メモを保存しました")
+                        st.rerun()
+                    
+                    # 却下理由を表示（rejectedの場合）
+                    if submission.status == "rejected" and submission.reject_reason:
+                        st.markdown("---")
+                        st.markdown("### 却下理由")
+                        st.warning(submission.reject_reason)
+                    
+                    # 差分表示（既存materialsとの比較）
+                    st.markdown("---")
+                    st.markdown("### 差分表示（既存材料との比較）")
+                    existing_material = db.query(Material).filter(
+                        Material.name_official == payload.get('name_official')
+                    ).first()
+                    
+                    if existing_material:
+                        diff = calculate_submission_diff(existing_material, payload)
+                        if diff:
+                            with st.expander("📊 変更された項目", expanded=True):
+                                for key, (old_val, new_val) in diff.items():
+                                    st.markdown(f"**{key}**:")
+                                    st.markdown(f"- 既存: `{old_val}`")
+                                    st.markdown(f"- 新規: `{new_val}`")
+                                    st.markdown("---")
+                        else:
+                            st.info("既存材料と差分はありません（新規登録または同一内容）")
+                    else:
+                        st.info("既存材料が見つかりません（新規登録）")
+                    
+                    # プレビュー（簡易表示）
+                    st.markdown("---")
+                    st.markdown("### プレビュー（全データ）")
+                    with st.expander("JSONデータ", expanded=False):
+                        st.json(payload)
+                    
+                    # アクション（ステータスに応じて表示）
+                    st.markdown("---")
+                    st.markdown("### アクション")
+                    
+                    if submission.status == "pending":
+                        col1, col2 = st.columns(2)
+                        
+                        with col1:
+                            if st.button("✅ 承認", key=f"approve_{submission.id}", type="primary"):
+                                result = approve_submission(submission.id, editor_note=submission.editor_note, db=db)
+                                if result.get("ok"):
+                                    st.success("✅ 承認しました！（非公開状態で保存されました）")
+                                    st.info("💡 承認後、材料一覧で公開トグルをONにしてください。")
+                                    st.cache_data.clear()  # キャッシュをクリア
+                                    st.rerun()
+                                else:
+                                    st.error(f"❌ エラー: {result.get('error', '不明なエラー')}")
+                                    if result.get("traceback"):
+                                        with st.expander("🔍 エラー詳細", expanded=False):
+                                            st.code(result["traceback"], language="python")
+                        
+                        with col2:
+                            reject_reason_key = f"reject_reason_{submission.id}"
+                            reject_reason = st.text_input(
+                                "却下理由（任意）",
+                                key=reject_reason_key,
+                                placeholder="却下理由を入力してください"
+                            )
+                            if st.button("❌ 却下", key=f"reject_{submission.id}"):
+                                result = reject_submission(submission.id, reject_reason, db)
+                                if result.get("ok"):
+                                    st.success("❌ 却下しました。")
+                                    st.cache_data.clear()  # キャッシュをクリア
+                                    st.rerun()
+                                else:
+                                    st.error(f"❌ エラー: {result.get('error', '不明なエラー')}")
+                    
+                    elif submission.status == "rejected":
+                        if st.button("🔄 再審査（pendingに戻す）", key=f"reopen_{submission.id}", type="primary"):
+                            result = reopen_submission(submission.id, db)
+                            if result.get("ok"):
+                                st.success("🔄 再審査に戻しました。")
+                                st.cache_data.clear()
+                                st.rerun()
+                            else:
+                                st.error(f"❌ エラー: {result.get('error', '不明なエラー')}")
+                    
+                    elif submission.status == "approved":
+                        if submission.approved_material_id:
+                            material = db.query(Material).filter(Material.id == submission.approved_material_id).first()
+                            if material:
+                                st.info(f"✅ 承認済み材料: {material.name_official} (ID: {material.id})")
+                                st.info(f"📢 公開状態: {'公開' if material.is_published == 1 else '非公開'}")
+                                if st.button("📝 材料詳細を見る", key=f"view_material_{submission.id}"):
+                                    st.session_state.selected_material_id = material.id
+                                    st.session_state.page = "材料一覧"
+                                    st.rerun()
+                except json.JSONDecodeError as e:
+                    st.error(f"❌ payload_jsonのパースに失敗しました: {e}")
+                    st.code(submission.payload_json)
+    
+    finally:
+        db.close()
+
+
+def approve_submission(submission_id: int, editor_note: str = None, db=None):
+    """
+    投稿を承認してmaterialsテーブルに反映
+    
+    Args:
+        submission_id: MaterialSubmissionのID
+        editor_note: 承認メモ（任意）
+        db: データベースセッション（Noneの場合は新規作成）
+    
+    Returns:
+        dict: {"ok": True/False, "material_id": int, "error": str, "traceback": str}
+    """
+    if db is None:
+        db = SessionLocal()
+        should_close = True
+    else:
+        should_close = False
+    
+    try:
+        # submissionを取得
+        submission = db.query(MaterialSubmission).filter(
+            MaterialSubmission.id == submission_id
+        ).first()
+        
+        if not submission:
+            return {"ok": False, "error": "Submission not found"}
+        
+        if submission.status != "pending":
+            return {"ok": False, "error": f"Submission is not pending (status: {submission.status})"}
+        
+        # payload_jsonをパース
+        try:
+            form_data = json.loads(submission.payload_json)
+        except json.JSONDecodeError as e:
+            return {"ok": False, "error": f"Failed to parse payload_json: {e}"}
+        
+        # 必須フィールドの補完
+        form_data = _normalize_required(form_data, existing=None)
+        
+        # materialsテーブルにupsert（name_officialで既存チェック）
+        existing_material = db.query(Material).filter(
+            Material.name_official == form_data.get('name_official')
+        ).first()
+        
+        if existing_material:
+            # 既存レコードを更新
+            material = existing_material
+            action = 'updated'
+        else:
+            # 新規レコードを作成
+            material_uuid = str(uuid.uuid4())
+            material = Material(uuid=material_uuid)
+            db.add(material)
+            action = 'created'
+        
+        # 必須フィールドを設定（Noneはスキップ）
+        for k, v in form_data.items():
+            if v is None:
+                continue
+            setattr(material, k, v)
+        
+        # 承認時は削除されていない状態にする（公開は後でトグルON）
+        material.is_published = 0  # 承認後、編集者が確認してから公開
+        material.is_deleted = 0
+        
+        # Materialデータを設定（新規の場合）
+        if action == 'created':
+            material.name_official = form_data['name_official']
+            material.name_aliases = json.dumps(form_data.get('name_aliases', []), ensure_ascii=False)
+            material.supplier_org = form_data['supplier_org']
+            material.supplier_type = form_data['supplier_type']
+            material.supplier_other = form_data.get('supplier_other')
+            material.category_main = form_data['category_main']
+            material.category_other = form_data.get('category_other')
+            material.material_forms = json.dumps(form_data['material_forms'], ensure_ascii=False)
+            material.material_forms_other = form_data.get('material_forms_other')
+            material.origin_type = form_data['origin_type']
+            material.origin_other = form_data.get('origin_other')
+            material.origin_detail = form_data['origin_detail']
+            material.recycle_bio_rate = form_data.get('recycle_bio_rate')
+            material.recycle_bio_basis = form_data.get('recycle_bio_basis')
+            material.color_tags = json.dumps(form_data.get('color_tags', []), ensure_ascii=False)
+            material.transparency = form_data['transparency']
+            material.hardness_qualitative = form_data['hardness_qualitative']
+            material.hardness_value = form_data.get('hardness_value')
+            material.weight_qualitative = form_data['weight_qualitative']
+            material.specific_gravity = form_data.get('specific_gravity')
+            material.water_resistance = form_data['water_resistance']
+            material.heat_resistance_temp = form_data.get('heat_resistance_temp')
+            material.heat_resistance_range = form_data['heat_resistance_range']
+            material.weather_resistance = form_data['weather_resistance']
+            material.processing_methods = json.dumps(form_data['processing_methods'], ensure_ascii=False)
+            material.processing_other = form_data.get('processing_other')
+            material.equipment_level = form_data['equipment_level']
+            material.prototyping_difficulty = form_data['prototyping_difficulty']
+            material.use_categories = json.dumps(form_data['use_categories'], ensure_ascii=False)
+            material.use_other = form_data.get('use_other')
+            material.procurement_status = form_data['procurement_status']
+            material.cost_level = form_data['cost_level']
+            material.cost_value = form_data.get('cost_value')
+            material.cost_unit = form_data.get('cost_unit')
+            material.safety_tags = json.dumps(form_data['safety_tags'], ensure_ascii=False)
+            material.safety_other = form_data.get('safety_other')
+            material.restrictions = form_data.get('restrictions')
+            material.visibility = form_data['visibility']
+            material.is_published = 0  # 承認後、編集者が確認してから公開
+            material.is_deleted = 0
+            # レイヤー②
+            material.development_motives = json.dumps(form_data.get('development_motives', []), ensure_ascii=False)
+            material.development_motive_other = form_data.get('development_motive_other')
+            material.development_background_short = form_data.get('development_background_short')
+            material.development_story = form_data.get('development_story')
+            material.tactile_tags = json.dumps(form_data.get('tactile_tags', []), ensure_ascii=False)
+            material.tactile_other = form_data.get('tactile_other')
+            material.visual_tags = json.dumps(form_data.get('visual_tags', []), ensure_ascii=False)
+            material.visual_other = form_data.get('visual_other')
+            material.sound_smell = form_data.get('sound_smell')
+            material.circularity = form_data.get('circularity')
+            material.certifications = json.dumps(form_data.get('certifications', []), ensure_ascii=False)
+            material.certifications_other = form_data.get('certifications_other')
+            material.main_elements = form_data.get('main_elements')
+            # 後方互換性
+            material.name = form_data['name_official']
+            material.category = form_data['category_main']
+        
+        db.flush()
+        
+        # 参照URL保存
+        if action == 'updated':
+            db.query(ReferenceURL).filter(ReferenceURL.material_id == material.id).delete()
+        for ref in form_data.get('reference_urls', []):
+            if ref.get('url'):
+                ref_url = ReferenceURL(
+                    material_id=material.id,
+                    url=ref['url'],
+                    url_type=ref.get('type'),
+                    description=ref.get('desc')
+                )
+                db.add(ref_url)
+        
+        # 使用例保存
+        if action == 'updated':
+            db.query(UseExample).filter(UseExample.material_id == material.id).delete()
+        for ex in form_data.get('use_examples', []):
+            if ex.get('name'):
+                use_ex = UseExample(
+                    material_id=material.id,
+                    example_name=ex['name'],
+                    example_url=ex.get('url'),
+                    description=ex.get('desc')
+                )
+                db.add(use_ex)
+        
+        # submissionを更新
+        submission.status = "approved"
+        submission.approved_material_id = material.id
+        if editor_note and editor_note.strip():
+            submission.editor_note = editor_note.strip()
+        
+        db.commit()
+        
+        return {
+            "ok": True,
+            "material_id": material.id,
+            "action": action,
+        }
+        
+    except Exception as e:
+        db.rollback()
+        import traceback
+        return {
+            "ok": False,
+            "error": str(e),
+            "traceback": traceback.format_exc(),
+        }
+    finally:
+        if should_close:
+            db.close()
+
+
+def calculate_submission_diff(existing_material: Material, payload: dict) -> dict:
+    """
+    既存材料とsubmission payloadの差分を計算
+    
+    Args:
+        existing_material: 既存のMaterialオブジェクト
+        payload: submissionのpayload_json（パース済み）
+    
+    Returns:
+        dict: {key: (old_value, new_value)} の形式で差分のみを返す
+    """
+    diff = {}
+    
+    # 比較対象のフィールド（主要なもの）
+    compare_fields = [
+        'name_official', 'category_main', 'supplier_org', 'supplier_type',
+        'origin_type', 'origin_detail', 'transparency', 'hardness_qualitative',
+        'weight_qualitative', 'water_resistance', 'heat_resistance_range',
+        'weather_resistance', 'equipment_level', 'prototyping_difficulty',
+        'procurement_status', 'cost_level', 'visibility', 'is_published'
+    ]
+    
+    for field in compare_fields:
+        old_val = getattr(existing_material, field, None)
+        new_val = payload.get(field)
+        
+        # Noneや空文字列を正規化
+        if old_val is None:
+            old_val = ""
+        if new_val is None:
+            new_val = ""
+        if isinstance(old_val, str):
+            old_val = old_val.strip()
+        if isinstance(new_val, str):
+            new_val = new_val.strip()
+        
+        # 差分がある場合のみ追加
+        if old_val != new_val and new_val not in (None, ""):
+            diff[field] = (str(old_val), str(new_val))
+    
+    return diff
+
+
+def reopen_submission(submission_id: int, db=None):
+    """
+    却下済みsubmissionを再審査（pendingに戻す）
+    
+    Args:
+        submission_id: MaterialSubmissionのID
+        db: データベースセッション（Noneの場合は新規作成）
+    
+    Returns:
+        dict: {"ok": True/False, "error": str, "traceback": str}
+    """
+    if db is None:
+        db = SessionLocal()
+        should_close = True
+    else:
+        should_close = False
+    
+    try:
+        # submissionを取得
+        submission = db.query(MaterialSubmission).filter(
+            MaterialSubmission.id == submission_id
+        ).first()
+        
+        if not submission:
+            return {"ok": False, "error": "Submission not found"}
+        
+        if submission.status != "rejected":
+            return {"ok": False, "error": f"Submission is not rejected (status: {submission.status})"}
+        
+        # pendingに戻す
+        submission.status = "pending"
+        submission.reject_reason = None  # 却下理由をクリア
+        
+        db.commit()
+        
+        return {"ok": True}
+        
+    except Exception as e:
+        db.rollback()
+        import traceback
+        return {
+            "ok": False,
+            "error": str(e),
+            "traceback": traceback.format_exc(),
+        }
+    finally:
+        if should_close:
+            db.close()
+
+
+def reject_submission(submission_id: int, reject_reason: str = None, db=None):
+    """
+    投稿を却下
+    
+    Args:
+        submission_id: MaterialSubmissionのID
+        reject_reason: 却下理由
+        db: データベースセッション（Noneの場合は新規作成）
+    
+    Returns:
+        dict: {"ok": True/False, "error": str, "traceback": str}
+    """
+    if db is None:
+        db = SessionLocal()
+        should_close = True
+    else:
+        should_close = False
+    
+    try:
+        # submissionを取得
+        submission = db.query(MaterialSubmission).filter(
+            MaterialSubmission.id == submission_id
+        ).first()
+        
+        if not submission:
+            return {"ok": False, "error": "Submission not found"}
+        
+        if submission.status != "pending":
+            return {"ok": False, "error": f"Submission is not pending (status: {submission.status})"}
+        
+        # 却下処理
+        submission.status = "rejected"
+        submission.reject_reason = reject_reason if reject_reason and reject_reason.strip() else None
+        
+        db.commit()
+        
+        return {"ok": True}
+        
+    except Exception as e:
+        db.rollback()
+        import traceback
+        return {
+            "ok": False,
+            "error": str(e),
+            "traceback": traceback.format_exc(),
+        }
+    finally:
+        if should_close:
+            db.close()
+
+
+def show_submission_status():
+    """投稿ステータス確認ページ（投稿者用）"""
+    is_debug = os.getenv("DEBUG", "0") == "1"
+    st.markdown(render_site_header(debug=is_debug), unsafe_allow_html=True)
+    st.markdown('<h2 class="section-title">📋 投稿ステータス確認</h2>', unsafe_allow_html=True)
+    st.info("💡 投稿時に表示された投稿IDまたはUUIDを入力してください。")
+    
+    submission_id_input = st.text_input(
+        "投稿ID または UUID",
+        placeholder="例: 1 または abc123-def456-...",
+        key="submission_status_id"
+    )
+    
+    if submission_id_input and submission_id_input.strip():
+        db = SessionLocal()
+        try:
+            # IDまたはUUIDで検索
+            submission = None
+            if submission_id_input.strip().isdigit():
+                submission = db.query(MaterialSubmission).filter(
+                    MaterialSubmission.id == int(submission_id_input.strip())
+                ).first()
+            else:
+                submission = db.query(MaterialSubmission).filter(
+                    MaterialSubmission.uuid == submission_id_input.strip()
+                ).first()
+            
+            if submission:
+                st.markdown("---")
+                st.markdown("### 📄 投稿情報")
+                
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.write(f"**投稿ID**: {submission.id}")
+                    st.write(f"**UUID**: {submission.uuid}")
+                    st.write(f"**投稿者**: {submission.submitted_by or '匿名'}")
+                    st.write(f"**投稿日時**: {submission.created_at.strftime('%Y-%m-%d %H:%M:%S')}")
+                
+                with col2:
+                    status_icon = {
+                        "pending": "⏳",
+                        "approved": "✅",
+                        "rejected": "❌"
+                    }.get(submission.status, "📄")
+                    
+                    status_color = {
+                        "pending": "#FFA500",
+                        "approved": "#28A745",
+                        "rejected": "#DC3545"
+                    }.get(submission.status, "#666")
+                    
+                    st.markdown(f"**ステータス**: <span style='color: {status_color}; font-size: 1.2em'>{status_icon} {submission.status}</span>", unsafe_allow_html=True)
+                    st.write(f"**更新日時**: {submission.updated_at.strftime('%Y-%m-%d %H:%M:%S')}")
+                    if submission.approved_material_id:
+                        st.write(f"**承認済み材料ID**: {submission.approved_material_id}")
+                
+                # payload_jsonをパースして表示
+                try:
+                    payload = json.loads(submission.payload_json)
+                    st.markdown("---")
+                    st.markdown("### 📝 投稿内容")
+                    st.write(f"**材料名（正式）**: {payload.get('name_official', 'N/A')}")
+                    st.write(f"**カテゴリ**: {payload.get('category_main', 'N/A')}")
+                    st.write(f"**供給元**: {payload.get('supplier_org', 'N/A')}")
+                except:
+                    pass
+                
+                # ステータス別のメッセージ
+                if submission.status == "pending":
+                    st.info("⏳ 承認待ちです。管理者の承認をお待ちください。")
+                elif submission.status == "approved":
+                    st.success("✅ 承認されました！")
+                    if submission.approved_material_id:
+                        material = db.query(Material).filter(Material.id == submission.approved_material_id).first()
+                        if material:
+                            st.info(f"📝 材料名: {material.name_official} (ID: {material.id})")
+                            st.info(f"📢 公開状態: {'公開' if material.is_published == 1 else '非公開（管理者が公開するまでお待ちください）'}")
+                elif submission.status == "rejected":
+                    st.warning("❌ 却下されました。")
+                    if submission.reject_reason:
+                        st.markdown("### 却下理由")
+                        st.error(submission.reject_reason)
+                
+                # 編集者メモ（あれば）
+                if submission.editor_note:
+                    st.markdown("---")
+                    st.markdown("### 📝 編集者メモ")
+                    st.info(submission.editor_note)
+            else:
+                st.error("❌ 投稿が見つかりませんでした。投稿IDまたはUUIDを確認してください。")
+        
+        finally:
+            db.close()
+    else:
+        st.info("💡 投稿IDまたはUUIDを入力してください。")
+
+
 def show_material_cards():
     """素材カード表示ページ（3タブ構造）"""
+    is_debug = os.getenv("DEBUG", "0") == "1"
+    st.markdown(render_site_header(debug=is_debug), unsafe_allow_html=True)
     st.markdown('<h2 class="section-title">素材カード</h2>', unsafe_allow_html=True)
     
     # 管理者表示フラグを取得
