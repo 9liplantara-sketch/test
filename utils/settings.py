@@ -148,6 +148,48 @@ def is_admin_mode() -> bool:
     return get_flag("ADMIN_MODE", False)
 
 
+def is_debug() -> bool:
+    """DEBUG が有効か（Secrets / 環境変数）。ログや内部診断用。"""
+    return get_flag("DEBUG", False)
+
+
+def is_debug_env() -> bool:
+    """DEBUG_ENV が有効か（Secrets / 環境変数）。詳細ログ用。"""
+    return get_flag("DEBUG_ENV", False)
+
+
+def is_admin_authenticated() -> bool:
+    """
+    管理者パスワード認証済みか。
+
+    - ADMIN_PASSWORD 未設定: ローカル開発のみ True（Cloud では False）
+    - ADMIN_PASSWORD 設定済み: session_state.admin_authenticated を見る
+    """
+    password = get_secret_str("ADMIN_PASSWORD", "").strip()
+    if not password:
+        return not is_cloud()
+
+    st = _get_st()
+    if st is None:
+        return False
+    try:
+        return bool(st.session_state.get("admin_authenticated", False))
+    except Exception:
+        return False
+
+
+def show_debug_ui() -> bool:
+    """
+    画面上にデバッグ表示を出してよいか。
+
+    DEBUG / DEBUG_ENV が有効でも、管理者認証前の学生には出さない。
+    サーバーログ用の is_debug() / is_debug_env() とは分離する。
+    """
+    if not (is_debug() or is_debug_env()):
+        return False
+    return is_admin_authenticated()
+
+
 # モジュールの公開APIを明示的に定義
 __all__ = [
     "is_cloud",
@@ -157,5 +199,9 @@ __all__ = [
     "get_secret_str",
     "get_flag",
     "is_admin_mode",
+    "is_debug",
+    "is_debug_env",
+    "is_admin_authenticated",
+    "show_debug_ui",
     "SETTINGS_VERSION",
 ]

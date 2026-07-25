@@ -539,10 +539,15 @@ def get_logo_debug_info() -> Dict[str, Any]:
 
 def show_logo_debug_info():
     """
-    ロゴファイルのデバッグ情報を表示（DEBUG=1の時のみ）
+    ロゴファイルのデバッグ情報を表示（管理者デバッグ時のみ）
     """
-    if os.getenv("DEBUG", "0") != "1":
-        return
+    try:
+        from utils.settings import show_debug_ui
+        if not show_debug_ui():
+            return
+    except Exception:
+        if os.getenv("DEBUG", "0") != "1":
+            return
     
     st.sidebar.markdown("---")
     st.sidebar.markdown("### 🔍 ロゴファイル実在確認")

@@ -56,10 +56,14 @@ def is_debug() -> bool:
         return False
 
 
-# is_debug_flag: 関数名衝突を避けるための alias（ファイル先頭で必ず定義）
-# utils.settings から import を試みるが、失敗時は fallback で is_debug を使用
+def show_debug_ui() -> bool:
+    """画面デバッグ表示用。未認証の学生には出さない（fallback実装）。"""
+    return False
+
+
+# is_debug_flag / show_debug_ui: settings を優先、失敗時は fallback
 try:
-    from utils.settings import is_debug as is_debug_flag
+    from utils.settings import is_debug as is_debug_flag, show_debug_ui as show_debug_ui
 except Exception:
     # utils.settings が壊れている場合の fallback
     is_debug_flag = is_debug
@@ -69,6 +73,9 @@ except Exception:
 if not callable(is_debug_flag):
     # 万が一 callable でない場合は fallback
     is_debug_flag = is_debug
+if not callable(show_debug_ui):
+    def show_debug_ui() -> bool:
+        return False
 
 
 from pathlib import Path
@@ -125,7 +132,7 @@ def render_startup_import_error(error_type, error_description, hints, debug_payl
         error_type: エラー種別（例: "ModuleNotFoundError", "ImportError", "想定外の例外"）
         error_description: エラーの説明文
         hints: 考えられる原因のリスト（文字列のリスト）
-        debug_payload: DEBUG_ENV=1 のときに表示する詳細情報（辞書またはNone）
+        debug_payload: 管理者向けデバッグ詳細（show_debug_ui時のみ表示）
     """
     st.error("❌ **アプリケーション起動エラー**")
     st.error("必須モジュールの import に失敗しました。")
@@ -143,12 +150,12 @@ def render_startup_import_error(error_type, error_description, hints, debug_payl
             st.error(f"- {hint}")
         st.error("")
     
-    # DEBUG_ENV=1 のときだけ詳細情報を表示（診断用、1つの code ブロックにまとめてコピペしやすくする）
-    if os.getenv("DEBUG_ENV") == "1" and debug_payload:
-        st.error("**DEBUG 情報 (DEBUG_ENV=1):**")
+    # 起動不能時は認証UIに到達できないため、DEBUG有効時のみ詳細を出す
+    if is_debug_flag() and debug_payload:
+        st.error("**DEBUG 情報 (DEBUG=1):**")
         st.code(debug_payload.strip(), language="text")
     
-    # 必ず停止する（DEBUG_ENV に関わらず、後段での例外連鎖を防ぐ）
+    # 必ず停止する（後段での例外連鎖を防ぐ）
     st.stop()
 
 # 必須モジュールの import 保険チェック（本番環境での import エラーを早期検出）
@@ -318,8 +325,9 @@ def run_app_entrypoint():
     - main呼び出しの強制
     - 例外の可視化
     """
-    # 1) まず本文に「動いてる」印を必ず出す（ここが出なければ main が呼ばれてない等）
-    st.write("✅ app.py is running (entrypoint reached)")
+    # 1) 起動確認マーカー（管理者向けデバッグ時のみ。学生画面には出さない）
+    if show_debug_ui():
+        st.write("✅ app.py is running (entrypoint reached)")
 
     # 2) 先にサイドバーDebugを描画（既存関数がある想定）
     # 同一run内で1回だけ描画する（二重表示を防ぐ）
@@ -328,7 +336,7 @@ def run_app_entrypoint():
             if "render_debug_sidebar_early" in globals():
                 render_debug_sidebar_early()
                 st.session_state["debug_sidebar_rendered"] = True
-            else:
+            elif show_debug_ui():
                 st.sidebar.info("render_debug_sidebar_early() not found")
         except Exception as e:
             _panic_screen("render_debug_sidebar_early", e)
@@ -338,7 +346,8 @@ def run_app_entrypoint():
     try:
         from database import init_db
         init_db()
-        st.write("✅ init_db() done")
+        if show_debug_ui():
+            st.write("✅ init_db() done")
     except Exception as e:
         _panic_screen("init_db", e)
         # st.stop()は呼ばない（本文を表示するため）
@@ -1408,7 +1417,7 @@ def show_materials_duplicate_diagnostics():
         db_count = db.execute(select(func.count(Material.id))).scalar() or 0
         
         # UI materials count（高速化のためget_material_count_cachedを使用、DEBUG=0の時はスキップ）
-        debug_enabled = os.getenv("DEBUG", "0") == "1"
+        debug_enabled = show_debug_ui()
         if debug_enabled:
             from utils.settings import get_database_url
             db_url = get_database_url()
@@ -1719,7 +1728,11 @@ def render_debug_sidebar_early():
     Debugを先に描画（UIが出る前に死ぬ問題を回避）
     DBのpath/sha/columns/件数を表示
     例外が起きても最後まで描く（st.stop()は絶対に呼ばない）
+    学生向けには何も出さない（show_debug_ui のみ）。
     """
+    if not show_debug_ui():
+        return
+
     import traceback
     import hashlib
     from pathlib import Path
@@ -1735,22 +1748,20 @@ def render_debug_sidebar_early():
             with st.sidebar.expander("詳細", expanded=False):
                 st.sidebar.exception(e)
         
-        # DB呼び出し回数表示（DEBUG_ENV=1時のみ）
-        if os.getenv("DEBUG_ENV", "0") == "1":
-            if "_db_call_counts" in st.session_state:
-                counts = st.session_state["_db_call_counts"]
-                total = sum(counts.values())
-                if total > 0:
-                    st.sidebar.markdown("---")
-                    st.sidebar.markdown("### 📊 DB呼び出し回数")
-                    st.sidebar.write(f"**合計:** {total} 回")
-                    for kind, count in counts.items():
-                        if count > 0:
-                            st.sidebar.write(f"- {kind}: {count} 回")
+        # DB呼び出し回数表示
+        if "_db_call_counts" in st.session_state:
+            counts = st.session_state["_db_call_counts"]
+            total = sum(counts.values())
+            if total > 0:
+                st.sidebar.markdown("---")
+                st.sidebar.markdown("### 📊 DB呼び出し回数")
+                st.sidebar.write(f"**合計:** {total} 回")
+                for kind, count in counts.items():
+                    if count > 0:
+                        st.sidebar.write(f"- {kind}: {count} 回")
         
-        # デバッグ情報（DEBUG=1のときのみ表示）
-        if os.getenv("DEBUG", "0") == "1":
-            with st.expander("🔧 Debug", expanded=False):
+        # デバッグ詳細
+        with st.expander("🔧 Debug", expanded=False):
                 # 環境情報（例外が起きても続行）
                 try:
                     st.write("**環境情報:**")
@@ -1858,80 +1869,69 @@ def render_debug_sidebar_early():
                         st.warning(f"base dir not exists: {base}")
                         dirs = []
                     
-                    # materialsを取得できている前提（取れない時はDB debugだけ出す、DEBUG=0の時はスキップ）
-                    debug_enabled = os.getenv("DEBUG", "0") == "1"
-                    if debug_enabled:
-                        try:
-                            from utils.settings import get_database_url
-                            db_url = get_database_url()
-                            material_count = get_material_count_cached(db_url, include_unpublished=False, include_deleted=False)
-                            st.write(f"- **materials count:** {material_count}")
-                            # 詳細な素材ごとの探索結果はDEBUG=1の時のみ（重い処理のため）
-                            bump_db_call_counter("list")
-                            materials = get_all_materials(db_url)
-                            if materials:
-                                st.write("**素材ごとの探索結果（先頭30件）:**")
-                                
-                                for m in materials[:30]:  # 先頭30件のみ
-                                    try:
-                                        # get_material_image_refを使用して画像参照を取得
-                                        # project_rootはbaseの親の親の親（static/images/materials -> static/images -> static -> プロジェクトルート）
-                                        project_root = base.parent.parent.parent
-                                        primary_src, primary_debug = get_material_image_ref(m, "primary", project_root)
-                                        space_src, space_debug = get_material_image_ref(m, "space", project_root)
-                                        product_src, product_debug = get_material_image_ref(m, "product", project_root)
-                                        
-                                        material_display_name = getattr(m, 'name_official', None) or getattr(m, 'name', None) or "N/A"
-                                        
-                                        with st.expander(f"📦 {material_display_name}", expanded=False):
-                                            # safe_slugとbase_dir_sampleを表示
-                                            safe_slug = primary_debug.get('safe_slug', 'N/A')
-                                            base_dir_sample = primary_debug.get('base_dir_sample', [])
-                                            chosen_branch = primary_debug.get('chosen_branch', 'unknown')
-                                            final_src_type = primary_debug.get('final_src_type', 'unknown')
-                                            final_path_exists = primary_debug.get('final_path_exists', False)
-                                            
-                                            st.write(f"**safe_slug:** {safe_slug}")
-                                            st.write(f"**base_dir_sample:** {', '.join(base_dir_sample[:10])}..." if len(base_dir_sample) > 10 else f"**base_dir_sample:** {', '.join(base_dir_sample)}")
-                                            st.write(f"**chosen_branch:** {chosen_branch}")
-                                            st.write(f"**final_src_type:** {final_src_type}")
-                                            st.write(f"**final_path_exists:** {final_path_exists}")
-                                            
-                                            if primary_src:
-                                                if isinstance(primary_src, str):
-                                                    st.write(f"**final_url:** {primary_src[:80]}..." if len(primary_src) > 80 else f"**final_url:** {primary_src}")
-                                                elif isinstance(primary_src, Path):
-                                                    st.write(f"**final_path:** {primary_src.resolve()}")
-                                            else:
-                                                st.warning("⚠️ primary.jpg not found")
-                                            
-                                            # candidate_pathsとfailed_pathsを表示
-                                            candidate_paths = primary_debug.get('candidate_paths', [])
-                                            failed_paths = primary_debug.get('failed_paths', [])
-                                            if candidate_paths:
-                                                st.write(f"**candidate_paths:** {len(candidate_paths)}件")
-                                            if failed_paths:
-                                                st.write(f"**failed_paths:** {len(failed_paths)}件")
-                                            
-                                            # 詳細情報はexpanderへ
-                                            with st.expander("🔍 詳細デバッグ情報", expanded=False):
-                                                st.json(primary_debug)
-                                    except Exception as e:
-                                        st.write(f"❌ {getattr(m, 'name_official', None) or 'N/A'}: {e}")
-                                        with st.expander("詳細", expanded=False):
-                                            st.code(traceback.format_exc())
-                                else:
-                                    st.write("- **materials:** 0件（DBが空）")
-                        except Exception as e:
-                            st.warning("materials取得失敗（DB debugだけ表示）")
-                    else:
-                        # DEBUG=0の時は件数のみ表示（高速化）
+                    # show_debug_ui() 通過済みのため詳細探索を表示
+                    try:
                         from utils.settings import get_database_url
                         db_url = get_database_url()
                         material_count = get_material_count_cached(db_url, include_unpublished=False, include_deleted=False)
                         st.write(f"- **materials count:** {material_count}")
-                        with st.expander("詳細", expanded=False):
-                            st.code(traceback.format_exc())
+                        bump_db_call_counter("list")
+                        materials = get_all_materials(db_url)
+                        if materials:
+                            st.write("**素材ごとの探索結果（先頭30件）:**")
+                            
+                            for m in materials[:30]:  # 先頭30件のみ
+                                try:
+                                    # get_material_image_refを使用して画像参照を取得
+                                    # project_rootはbaseの親の親の親（static/images/materials -> static/images -> static -> プロジェクトルート）
+                                    project_root = base.parent.parent.parent
+                                    primary_src, primary_debug = get_material_image_ref(m, "primary", project_root)
+                                    space_src, space_debug = get_material_image_ref(m, "space", project_root)
+                                    product_src, product_debug = get_material_image_ref(m, "product", project_root)
+                                    
+                                    material_display_name = getattr(m, 'name_official', None) or getattr(m, 'name', None) or "N/A"
+                                    
+                                    with st.expander(f"📦 {material_display_name}", expanded=False):
+                                        # safe_slugとbase_dir_sampleを表示
+                                        safe_slug = primary_debug.get('safe_slug', 'N/A')
+                                        base_dir_sample = primary_debug.get('base_dir_sample', [])
+                                        chosen_branch = primary_debug.get('chosen_branch', 'unknown')
+                                        final_src_type = primary_debug.get('final_src_type', 'unknown')
+                                        final_path_exists = primary_debug.get('final_path_exists', False)
+                                        
+                                        st.write(f"**safe_slug:** {safe_slug}")
+                                        st.write(f"**base_dir_sample:** {', '.join(base_dir_sample[:10])}..." if len(base_dir_sample) > 10 else f"**base_dir_sample:** {', '.join(base_dir_sample)}")
+                                        st.write(f"**chosen_branch:** {chosen_branch}")
+                                        st.write(f"**final_src_type:** {final_src_type}")
+                                        st.write(f"**final_path_exists:** {final_path_exists}")
+                                        
+                                        if primary_src:
+                                            if isinstance(primary_src, str):
+                                                st.write(f"**final_url:** {primary_src[:80]}..." if len(primary_src) > 80 else f"**final_url:** {primary_src}")
+                                            elif isinstance(primary_src, Path):
+                                                st.write(f"**final_path:** {primary_src.resolve()}")
+                                        else:
+                                            st.warning("⚠️ primary.jpg not found")
+                                        
+                                        # candidate_pathsとfailed_pathsを表示
+                                        candidate_paths = primary_debug.get('candidate_paths', [])
+                                        failed_paths = primary_debug.get('failed_paths', [])
+                                        if candidate_paths:
+                                            st.write(f"**candidate_paths:** {len(candidate_paths)}件")
+                                        if failed_paths:
+                                            st.write(f"**failed_paths:** {len(failed_paths)}件")
+                                        
+                                        # 詳細情報はexpanderへ
+                                        with st.expander("🔍 詳細デバッグ情報", expanded=False):
+                                            st.json(primary_debug)
+                                except Exception as e:
+                                    st.write(f"❌ {getattr(m, 'name_official', None) or 'N/A'}: {e}")
+                                    with st.expander("詳細", expanded=False):
+                                        st.code(traceback.format_exc())
+                        else:
+                            st.write("- **materials:** 0件（DBが空）")
+                    except Exception as e:
+                        st.warning("materials取得失敗（DB debugだけ表示）")
                 except Exception as e:
                     # sidebarで例外が起きたら警告を出して続行（本体描画を止めない）
                     st.sidebar.warning("Sidebar: 画像探索情報の取得に失敗")
@@ -1994,7 +1994,7 @@ def main():
         ensure_state_defaults()
     except Exception as e:
         # 初期化失敗時も続行（後でエラーが表示される）
-        if is_debug_flag():
+        if show_debug_ui():
             st.warning(f"ensure_state_defaults() failed: {e}")
     
     # パフォーマンス計測（DEBUG=1のみ）
@@ -2003,104 +2003,14 @@ def main():
     
     # 起動順序を固定：Debug表示 → init_db() → その後に通常処理
     
-    # 常時表示: 実行中のコミットSHA（反映確認用）
-    from features.approval_actions import APPROVAL_ACTIONS_VERSION
-    st.caption(f"RUNNING_SHA: {get_running_sha()} | APPROVAL_ACTIONS_VERSION: {APPROVAL_ACTIONS_VERSION}")
-    
-    # DEBUG判定とデバッグ情報表示
-    if is_debug_flag():
-        debug_info = {
-            "DEPLOY_VERSION": DEPLOY_VERSION,
-            "APP_FILE": __file__,
-            "DEBUG_ENV": os.getenv("DEBUG"),
-            "DEBUG_SECRET": None,
-            "DB_URL": None,
-        }
-        # st.secretsからDEBUGを取得
-        try:
-            debug_info["DEBUG_SECRET"] = st.secrets.get("DEBUG")
-        except Exception:
-            pass
-        
-        # DB接続先情報を取得（マスク済み）
-        try:
-            import utils.settings as settings
-            db_url = settings.get_database_url()
-            debug_info["DB_URL"] = settings.mask_db_url(db_url)
-            debug_info["DB_DIALECT"] = settings.get_db_dialect(db_url)
-            
-            # utils.settings のデバッグ情報（原因特定用）
-            try:
-                debug_info["utils.settings"] = {
-                    "__file__": str(getattr(settings, "__file__", "unknown")),
-                    "has_get_flag": hasattr(settings, "get_flag"),
-                    "get_flag_callable": callable(getattr(settings, "get_flag", None)),
-                    "version": getattr(settings, "SETTINGS_VERSION", "unknown"),
-                    "dir_contains_get_flag": "get_flag" in dir(settings),
-                }
-                # get_flag が呼べるかテスト
-                test_flag = settings.get_flag("DEBUG", False)
-                debug_info["utils.settings"]["test_get_flag_result"] = test_flag
-            except Exception as e:
-                debug_info["utils.settings"] = {"error": str(e)}
-            
-            # utils.r2_storage のデバッグ情報（実行されているモジュールを確定）
-            try:
-                import utils.r2_storage as r2
-                debug_info["utils.r2_storage"] = {
-                    "__file__": str(getattr(r2, "__file__", None)),
-                    "has_upload_uploadedfile_to_prefix": hasattr(r2, "upload_uploadedfile_to_prefix"),
-                    "r2_storage_version": getattr(r2, "R2_STORAGE_VERSION", None),
-                    "dir_contains_prefix": "upload_uploadedfile_to_prefix" in dir(r2),
-                }
-                # upload_uploadedfile_to_prefix が呼べるかテスト（callableチェック）
-                if hasattr(r2, "upload_uploadedfile_to_prefix"):
-                    debug_info["utils.r2_storage"]["prefix_callable"] = callable(getattr(r2, "upload_uploadedfile_to_prefix", None))
-                else:
-                    debug_info["utils.r2_storage"]["prefix_callable"] = False
-            except Exception as e:
-                debug_info["utils.r2_storage"] = {"error": str(e)}
-            
-            # 実行中ファイルの内容を確認する診断（ファイルプローブ）
-            def _file_probe(path: str, needles: list[str], head_chars: int = 1200):
-                """ファイルの内容を確認する診断関数"""
-                import hashlib
-                try:
-                    with open(path, "rb") as f:
-                        data = f.read()
-                    text = data.decode("utf-8", errors="replace")
-                    return {
-                        "path": path,
-                        "sha256": hashlib.sha256(data).hexdigest()[:12],
-                        "contains": {n: (n in text) for n in needles},
-                        "head": text[:head_chars],
-                    }
-                except Exception as e:
-                    return {"path": path, "error": str(e)}
-            
-            # utils.settings と utils.r2_storage の実行中ファイルをプローブ
-            try:
-                import utils.settings as settings
-                import utils.r2_storage as r2
-                debug_info["runtime_file_probe"] = {
-                    "utils.settings": _file_probe(
-                        getattr(settings, "__file__", ""),
-                        needles=["def get_flag", "SETTINGS_VERSION"]
-                    ),
-                    "utils.r2_storage": _file_probe(
-                        getattr(r2, "__file__", ""),
-                        needles=["def upload_uploadedfile_to_prefix", "R2_STORAGE_VERSION"]
-                    ),
-                }
-            except Exception as e:
-                debug_info["runtime_file_probe"] = {"error": str(e)}
-        except Exception as e:
-            debug_info["DB_ERROR"] = str(e)
-        
-        st.json(debug_info)
-    
-    # 本文到達マーカー（DBやoption_menuより前に必ず出す）
-    st.markdown("### ✅ App booted (body reached)")
+    # 実行中バージョンは一言だけ（長い JSON / 起動マーカーは出さない）
+    if show_debug_ui():
+        from features.approval_actions import APPROVAL_ACTIONS_VERSION
+        st.caption(
+            f"RUNNING_SHA: {get_running_sha()} | "
+            f"DEPLOY: {DEPLOY_VERSION} | "
+            f"APPROVAL: {APPROVAL_ACTIONS_VERSION}"
+        )
     print("[BOOT] body reached")  # runtime logsで見える
     
     # 1. Debugを先に描画（UIが出る前に死ぬ問題を回避）
@@ -2109,11 +2019,12 @@ def main():
     if "debug_sidebar_rendered" not in st.session_state:
         try:
             render_debug_sidebar_early()
-            # ロゴファイルのデバッグ情報を表示（DEBUG=1の時のみ）
+            # ロゴファイルのデバッグ情報を表示（管理者デバッグ時のみ）
             try:
                 show_logo_debug_info()
             except Exception as e:
-                st.sidebar.warning(f"ロゴデバッグ情報の表示に失敗: {e}")
+                if show_debug_ui():
+                    st.sidebar.warning(f"ロゴデバッグ情報の表示に失敗: {e}")
             st.session_state["debug_sidebar_rendered"] = True
         except Exception as e:
             _panic_screen("render_debug_sidebar_early in main()", e)
@@ -2232,9 +2143,10 @@ def main():
         from utils.ensure_assets import ensure_all_assets
         asset_stats = ensure_all_assets()
     except Exception as e:
-        # 例外を可視化（本文に出す）
-        st.warning(f"アセット確保エラー: {e}")
-        st.code("".join(traceback.format_exception(type(e), e, e.__traceback__)), language="python")
+        # 例外を可視化（管理者デバッグ時のみ本文に出す）
+        if show_debug_ui():
+            st.warning(f"アセット確保エラー: {e}")
+            st.code("".join(traceback.format_exception(type(e), e, e.__traceback__)), language="python")
         asset_stats = {}
     
     # サンプルデータの自動投入（INIT_SAMPLE_DATA=1 かつ DBが空の時だけ実行）
@@ -2246,7 +2158,7 @@ def main():
         # 例外はログのみ（起動時クラッシュを防ぐため、画面には出さない）
         import traceback
         print(f"[WARN] maybe_init_sample_data() failed: {e}")
-        if os.getenv("DEBUG", "0") == "1":
+        if show_debug_ui():
             st.warning(f"maybe_init_sample_data() failed: {e}")
             st.code("".join(traceback.format_exception(type(e), e, e.__traceback__)), language="python")
         # アプリ起動は続行
@@ -2258,22 +2170,23 @@ def main():
             from utils.ensure_images import ensure_images
             ensure_images(Path.cwd())
         except Exception as e:
-            # 例外を可視化（本文に出す）
-            st.warning(f"画像自動修復エラー: {e}")
-            st.code("".join(traceback.format_exception(type(e), e, e.__traceback__)), language="python")
+            # 例外を可視化（管理者デバッグ時のみ本文に出す）
+            if show_debug_ui():
+                st.warning(f"画像自動修復エラー: {e}")
+                st.code("".join(traceback.format_exception(type(e), e, e.__traceback__)), language="python")
             # アプリ起動は続行
     
-    # デバッグスイッチ（サイドバーでCSSを無効化可能）
-    debug_no_css = st.sidebar.checkbox("Debug: CSSを無効化", value=False, help="白飛びが発生している場合、このチェックをONにするとCSSを無効化して表示を確認できます")
-    
-    # 画像診断モード（開発用）
-    debug_images = st.sidebar.checkbox("🔍 画像診断モード", value=False, help="画像の健康状態を診断します（原因切り分け用）")
-    
-    # Asset診断モード（新規）
-    debug_assets = st.sidebar.checkbox("🔍 Asset診断モード", value=False, help="生成物（元素画像など）の存在状況を診断します")
-    
-    # 材料重複診断モード（新規）
-    debug_materials_duplicate = st.sidebar.checkbox("🔍 材料重複診断", value=False, help="材料の重複状況を診断します")
+    # デバッグスイッチ（管理者認証後のみ。学生には出さない）
+    if show_debug_ui():
+        debug_no_css = st.sidebar.checkbox("Debug: CSSを無効化", value=False, help="白飛びが発生している場合、このチェックをONにするとCSSを無効化して表示を確認できます")
+        debug_images = st.sidebar.checkbox("🔍 画像診断モード", value=False, help="画像の健康状態を診断します（原因切り分け用）")
+        debug_assets = st.sidebar.checkbox("🔍 Asset診断モード", value=False, help="生成物（元素画像など）の存在状況を診断します")
+        debug_materials_duplicate = st.sidebar.checkbox("🔍 材料重複診断", value=False, help="材料の重複状況を診断します")
+    else:
+        debug_no_css = False
+        debug_images = False
+        debug_assets = False
+        debug_materials_duplicate = False
     
     # CSS適用（デバッグモードでない場合のみ）
     if not debug_no_css:
@@ -2367,7 +2280,7 @@ def main():
     with st.sidebar:
         # ロゴマークをサイドバー最上部に表示（全ページ共通）
         from utils.logo import render_logo_mark
-        is_debug = os.getenv("DEBUG", "0") == "1"
+        is_debug = show_debug_ui()
         
         # ロゴマークを中央寄せで大きく表示
         st.markdown("""
@@ -2480,8 +2393,13 @@ def main():
         
         st.markdown("---")
         
-        # 管理者認証（ADMIN_PASSWORD）
-        admin_password = os.getenv("ADMIN_PASSWORD", "")
+        # 管理者認証（ADMIN_PASSWORD: Secrets / 環境変数）
+        # デバッグUIもこの認証後のみ表示される（show_debug_ui）
+        try:
+            from utils.settings import get_secret_str
+            admin_password = get_secret_str("ADMIN_PASSWORD", "").strip()
+        except Exception:
+            admin_password = os.getenv("ADMIN_PASSWORD", "").strip()
         if admin_password:
             # セッション状態で認証状態を管理
             if "admin_authenticated" not in st.session_state:
@@ -2508,6 +2426,8 @@ def main():
                 if st.button("🔓 ログアウト", key="admin_logout"):
                     st.session_state["admin_authenticated"] = False
                     st.rerun()
+                if show_debug_ui():
+                    st.caption("🛠 デバッグ表示: ON（管理者のみ）")
         
         # 管理者表示チェック（管理者のみ）
         if is_admin:
@@ -2602,7 +2522,7 @@ def main():
                 except Exception as e:
                     # 統計情報取得失敗時はデフォルト値のまま進む（PANICさせない）
                     material_count = 0
-                    if is_debug_flag():
+                    if show_debug_ui():
                         st.caption(f"統計情報取得エラー（表示は続行）: {e}")
                 
                 # 材料数はmaterial_countを使用（materialsが空でも表示できる）
@@ -2636,7 +2556,7 @@ def main():
         return  # 診断モード時は他のページを表示しない
     
     # 画像診断モード（デバッグ時のみ表示、DEBUG=0の時はスキップ）
-    debug_enabled = os.getenv("DEBUG", "0") == "1"
+    debug_enabled = show_debug_ui()
     if debug_images and debug_enabled:
         from utils.image_diagnostics import show_image_diagnostics
         from utils.db import DBUnavailableError
@@ -2684,7 +2604,7 @@ def main():
                 return
     except Exception as e:
         # routes取得失敗時は従来のルーティングにフォールバック
-        if is_debug_flag():
+        if show_debug_ui():
             st.warning(f"get_routes() failed, using fallback routing: {e}")
     
     # ホーム以外のページには「← ホーム」リンク風ボタンを表示
@@ -2935,9 +2855,9 @@ def show_home():
     # 実行順序の安全策: is_debug_flag が存在することを確認
     if not callable(is_debug_flag):
         # 万が一 is_debug_flag が存在しない場合は fallback
-        debug_enabled = os.getenv("DEBUG", "0") == "1"
+        debug_enabled = show_debug_ui()
     else:
-        debug_enabled = is_debug_flag()
+        debug_enabled = show_debug_ui()
     
     # パフォーマンス計測（DEBUG=1のみ）
     import time
@@ -3199,7 +3119,7 @@ def show_home():
         """, unsafe_allow_html=True)
     
     # 強制画像テスト（診断用：DEBUG=1時のみ、かつチェックボックスONのときだけ表示）
-    if os.getenv("DEBUG", "0") == "1" and materials:
+    if show_debug_ui() and materials:
         if st.checkbox("🔍 診断: 強制画像テストを表示", value=False, key="dbg_force_img_test"):
             st.markdown("---")
             st.markdown("### 🔍 強制画像テスト（診断用）")
@@ -3396,17 +3316,17 @@ def show_materials_list(include_unpublished: bool = False, include_deleted: bool
         # パフォーマンス計測（DEBUG=1のみ）
         import time
         # is_debug 関数を呼ぶ前に、ローカル変数名を debug_enabled に変更（シャドーイング回避）
-        debug_enabled = is_debug_flag()
+        debug_enabled = show_debug_ui()
         t0 = time.perf_counter() if debug_enabled else None
         
-        debug_enabled = os.getenv("DEBUG", "0") == "1"
+        debug_enabled = show_debug_ui()
         st.markdown(render_site_header(debug=debug_enabled), unsafe_allow_html=True)
         st.markdown('<h2 class="section-title">材料一覧</h2>', unsafe_allow_html=True)
         
         # 管理者用の設定エリア（本文側に表示）
         from utils.settings import is_admin_mode
         is_admin = is_admin_mode()
-        is_debug = os.getenv("DEBUG", "0") == "1"
+        is_debug = show_debug_ui()
         
         if is_admin or is_debug:
             st.markdown("---")
@@ -4001,13 +3921,13 @@ def show_materials_list(include_unpublished: bool = False, include_deleted: bool
     except Exception as e:
         logger.exception(f"[MATERIALS LIST] Error: {e}")
         st.error(f"❌ 材料一覧の表示中にエラーが発生しました: {e}")
-        if is_debug_flag():
+        if show_debug_ui():
             import traceback
             st.code("".join(traceback.format_exception(type(e), e, e.__traceback__)), language="python")
 
 def show_dashboard():
     """ダッシュボードページ（管理者限定、全件取得）"""
-    is_debug = os.getenv("DEBUG", "0") == "1"
+    is_debug = show_debug_ui()
     st.markdown(render_site_header(debug=is_debug), unsafe_allow_html=True)
     st.markdown('<h2 class="section-title">ダッシュボード</h2>', unsafe_allow_html=True)
     
@@ -4119,7 +4039,7 @@ def show_dashboard():
 
 def show_search():
     """検索ページ（万華鏡体験：フィルタ + 全文検索）"""
-    is_debug = os.getenv("DEBUG", "0") == "1"
+    is_debug = show_debug_ui()
     st.markdown(render_site_header(debug=is_debug), unsafe_allow_html=True)
     st.markdown('<h2 class="section-title">材料検索</h2>', unsafe_allow_html=True)
     
@@ -4453,7 +4373,7 @@ def _render_material_search_card(material, idx: int, search_query: str, image_ur
         image_url: primary画像URL（一括取得済み、Noneの場合は個別取得を試みる）
     """
     # DEBUG=1のときだけ関数冒頭でmaterial情報を表示
-    is_debug = os.getenv("DEBUG", "0") == "1"
+    is_debug = show_debug_ui()
     if is_debug:
         material_name = getattr(material, "name_official", None) or getattr(material, "name", None) or "名称不明"
         st.caption(f"DEBUG: _render_material_search_card() material.id={material.id} material_name={material_name}")
@@ -5067,7 +4987,7 @@ def show_bulk_import(embedded: bool = False):
     is_admin = is_admin_mode()
     
     if not embedded:
-        is_debug = os.getenv("DEBUG", "0") == "1"
+        is_debug = show_debug_ui()
         st.markdown(render_site_header(debug=is_debug), unsafe_allow_html=True)
         st.markdown('<h2 class="section-title">📦 一括登録</h2>', unsafe_allow_html=True)
     else:
@@ -5271,7 +5191,7 @@ def show_bulk_import(embedded: bool = False):
 def show_submission_status():
     """投稿ステータス確認ページ（投稿者用、エラーハンドリング強化）"""
     try:
-        is_debug = os.getenv("DEBUG", "0") == "1"
+        is_debug = show_debug_ui()
         st.markdown(render_site_header(debug=is_debug), unsafe_allow_html=True)
         st.markdown('<h2 class="section-title">📋 投稿ステータス確認</h2>', unsafe_allow_html=True)
         st.info("💡 投稿時に表示された投稿IDまたはUUIDを入力してください。")
@@ -5368,7 +5288,7 @@ def show_submission_status():
     except Exception as e:
         logger.exception(f"[SUBMISSION STATUS] Error: {e}")
         st.error(f"❌ 投稿ステータス確認中にエラーが発生しました: {e}")
-        if is_debug_flag():
+        if show_debug_ui():
             import traceback
             st.code("".join(traceback.format_exception(type(e), e, e.__traceback__)), language="python")
 
@@ -5376,7 +5296,7 @@ def show_submission_status():
 def show_material_cards():
     """素材カード表示ページ（3タブ構造、エラーハンドリング強化）"""
     try:
-        is_debug = os.getenv("DEBUG", "0") == "1"
+        is_debug = show_debug_ui()
         st.markdown(render_site_header(debug=is_debug), unsafe_allow_html=True)
         st.markdown('<h2 class="section-title">素材カード</h2>', unsafe_allow_html=True)
         
@@ -5585,7 +5505,7 @@ def show_material_cards():
                 
                 # カード画面にエラーを表示（ホームには出さない）
                 st.error(f"⚠️ カード生成中にエラーが発生しました: {error_message}")
-                if os.getenv("DEBUG", "0") == "1":
+                if show_debug_ui():
                     with st.expander("詳細エラー情報", expanded=False):
                         st.code(error_traceback, language="python")
                 
@@ -5653,7 +5573,7 @@ def show_material_cards():
     except Exception as e:
         logger.exception(f"[MATERIAL CARDS] Error: {e}")
         st.error(f"❌ 素材カード表示中にエラーが発生しました: {e}")
-        if is_debug_flag():
+        if show_debug_ui():
             import traceback
             st.code("".join(traceback.format_exception(type(e), e, e.__traceback__)), language="python")
 

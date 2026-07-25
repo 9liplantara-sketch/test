@@ -317,7 +317,12 @@ def show_properties_tab(material):
                     except Exception as e:
                         import traceback
                         st.caption(f"{method} (エラー: {str(e)[:50]})")
-                        if os.getenv("DEBUG", "false").lower() == "true":
+                        try:
+                            from utils.settings import show_debug_ui
+                            _dbg = show_debug_ui()
+                        except Exception:
+                            _dbg = os.getenv("DEBUG", "false").lower() == "true"
+                        if _dbg:
                             st.code(traceback.format_exc())
 
 
@@ -447,7 +452,12 @@ def show_procurement_uses_tab(material):
                                     display_image_unified(img_path, caption=use_ex.example_name, width=280)
                                     image_displayed = True
                             except Exception as e:
-                                if os.getenv("DEBUG", "0") == "1":
+                                try:
+                                    from utils.settings import show_debug_ui
+                                    _dbg = show_debug_ui()
+                                except Exception:
+                                    _dbg = os.getenv("DEBUG", "0") == "1"
+                                if _dbg:
                                     st.caption(f"用途写真読み込みエラー: {e}")
                         
                         # 画像がない場合は既存の表示関数を使用

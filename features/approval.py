@@ -21,23 +21,18 @@ def show_approval_queue():
     # パフォーマンス計測（DEBUG=1のみ）
     import time
     
-    # is_debug_flag関数を取得
+    # 画面デバッグは管理者認証後のみ（ログ用 is_debug とは分離）
     try:
-        from utils.settings import is_debug as is_debug_flag
+        from utils.settings import is_debug as is_debug_flag, show_debug_ui
     except Exception:
-        # fallback: os.getenvを使用
         def is_debug_flag():
             return os.getenv("DEBUG", "0") == "1"
+        def show_debug_ui():
+            return False
     
-    debug_enabled = is_debug_flag()
-    t0 = time.perf_counter() if debug_enabled else None
-    
-    # デバッグ表示用フラグ
-    try:
-        from utils.settings import get_flag
-        is_debug = get_flag("DEBUG_ENV", False)
-    except Exception:
-        is_debug = False
+    debug_enabled = show_debug_ui()
+    t0 = time.perf_counter() if is_debug_flag() else None
+    is_debug = debug_enabled
     
     # ヘッダー表示
     try:

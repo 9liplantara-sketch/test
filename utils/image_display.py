@@ -513,8 +513,13 @@ def display_image_unified(
             f'<div style="{placeholder_style} background: #f0f0f0; display: flex; align-items: center; justify-content: center; color: #666;">画像なし</div>',
             unsafe_allow_html=True
         )
-        # DEBUG=1のときのみdebug情報を表示
-        if debug and os.getenv("DEBUG", "0") == "1":
+        # 管理者デバッグ時のみdebug情報を表示
+        try:
+            from utils.settings import show_debug_ui
+            _show_dbg = show_debug_ui()
+        except Exception:
+            _show_dbg = os.getenv("DEBUG", "0") == "1"
+        if debug and _show_dbg:
             with st.expander("🔍 デバッグ情報", expanded=False):
                 st.json(debug)
         return
@@ -574,7 +579,12 @@ def display_image_unified(
         else:
             display_image_unified(None, caption=caption, debug=debug)
     except Exception as e:
-        if os.getenv("DEBUG_IMAGE", "false").lower() == "true" or os.getenv("DEBUG", "0") == "1":
+        try:
+            from utils.settings import show_debug_ui
+            _show_dbg = show_debug_ui()
+        except Exception:
+            _show_dbg = os.getenv("DEBUG", "0") == "1"
+        if os.getenv("DEBUG_IMAGE", "false").lower() == "true" or _show_dbg:
             st.error(f"画像表示エラー: {e}")
             if debug:
                 with st.expander("🔍 デバッグ情報", expanded=False):

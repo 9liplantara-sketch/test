@@ -21,6 +21,14 @@ if not logger.handlers:
     logger.setLevel(logging.INFO)
 
 
+def _show_debug_ui() -> bool:
+    try:
+        from utils.settings import show_debug_ui
+        return show_debug_ui()
+    except Exception:
+        return os.getenv("DEBUG", "0") == "1"
+
+
 # ===== Widget Key統一管理 =====
 
 # 主要5項目（wkey完全統一対象）
@@ -741,7 +749,7 @@ def show_detailed_material_form(material_id: int = None):
                 st.session_state[f"existing_form_data_{suffix}"] = existing_form_data
                 
                 # DEBUG時のみログ出力
-                if os.getenv("DEBUG", "0") == "1":
+                if _show_debug_ui():
                     seeded_count = sum(1 for k in st.session_state.keys() if k.startswith(f"mf:{scope}:"))
                     logger.info(f"[SEED] material_id={material_id}, scope={scope}, seeded_wkeys_count={seeded_count}, images_count={len(existing_form_data.get('existing_images', []))}")
     else:
@@ -897,7 +905,7 @@ def show_detailed_material_form(material_id: int = None):
                         form_data.update(layer1_data)
                 except Exception as e:
                     # 例外が発生しても form を続行（ボタンは必ず表示される）
-                    if os.getenv("DEBUG", "0") == "1":
+                    if _show_debug_ui():
                         st.error(f"⚠️ Layer1フォームでエラーが発生しました: {e}")
                         import traceback
                         st.code(traceback.format_exc(), language="python")
@@ -917,7 +925,7 @@ def show_detailed_material_form(material_id: int = None):
                         layer2_data = show_layer2_form(existing_material=existing_material, scope=scope, material_id_for_wkey=material_id)
                     else:
                         # existing_material パラメータが存在しない場合（古い実装）
-                        if os.getenv("DEBUG", "0") == "1":
+                        if _show_debug_ui():
                             st.warning("⚠️ show_layer2_form が existing_material パラメータを受け取りません（古い実装）")
                             st.json({
                                 "show_layer2_form.module": getattr(show_layer2_form, "__module__", None),
@@ -929,7 +937,7 @@ def show_detailed_material_form(material_id: int = None):
                         layer2_data = show_layer2_form(scope=scope, material_id_for_wkey=material_id)
                 except TypeError as e:
                     # 念のため最終フォールバック（古い関数でも落ちない）
-                    if os.getenv("DEBUG", "0") == "1":
+                    if _show_debug_ui():
                         try:
                             sig = inspect.signature(show_layer2_form)
                             params = sig.parameters
@@ -949,12 +957,12 @@ def show_detailed_material_form(material_id: int = None):
                         layer2_data = show_layer2_form(scope=scope, material_id_for_wkey=material_id)
                     except Exception as fallback_error:
                         # それでも失敗する場合は空のdictを設定（クラッシュを防ぐ）
-                        if os.getenv("DEBUG", "0") == "1":
+                        if _show_debug_ui():
                             st.error(f"⚠️ show_layer2_form() の呼び出しに失敗しました: {fallback_error}")
                         layer2_data = {}
                 except Exception as e:
                     # その他の予期しない例外
-                    if os.getenv("DEBUG", "0") == "1":
+                    if _show_debug_ui():
                         st.error(f"⚠️ show_layer2_form の呼び出しで予期しないエラー: {e}")
                         import traceback
                         st.code(traceback.format_exc(), language="python")
@@ -1062,13 +1070,13 @@ def show_detailed_material_form(material_id: int = None):
                         submitted_by = None
             except Exception as e:
                 # 例外が発生しても form を続行（ボタンは必ず表示される）
-                if os.getenv("DEBUG", "0") == "1":
+                if _show_debug_ui():
                     st.error(f"⚠️ 投稿者情報でエラーが発生しました: {e}")
                 submitted_by = None
         
         except Exception as e:
             # form ブロック全体で例外が発生した場合でも、submit ボタンに到達する
-            if os.getenv("DEBUG", "0") == "1":
+            if _show_debug_ui():
                 st.error(f"⚠️ フォーム描画中にエラーが発生しました: {e}")
                 import traceback
                 st.code(traceback.format_exc(), language="python")
@@ -1087,8 +1095,8 @@ def show_detailed_material_form(material_id: int = None):
             # 必ず form ブロック内で submit ボタンを定義（finally ブロックで必ず実行される）
             submitted = st.form_submit_button(button_text, type="primary", use_container_width=True)
             
-            # DEBUG用（submitted が True のときだけ表示）
-            if submitted and os.getenv("DEBUG", "0") == "1":
+            # DEBUG用（submitted が True のときだけ、管理者のみ表示）
+            if submitted and _show_debug_ui():
                 st.success("DEBUG: submitted=True (フォーム送信を検知)")
     
     # submitted 時は、extract_payloadでwkeyから値を収集
@@ -1286,7 +1294,7 @@ def show_detailed_material_form(material_id: int = None):
         logger.info(f"[MATERIAL FORM] cached_image_count={cached_image_count}, is_edit_mode={is_edit_mode}")
         
         # DEBUG=1 のときは UI にも表示
-        if os.getenv("DEBUG", "0") == "1":
+        if _show_debug_ui():
             st.info(f"📸 キャッシュ画像: {cached_image_count} 枚")
             for idx, img in enumerate(uploaded_files):
                 if hasattr(img, 'name'):
@@ -1351,12 +1359,15 @@ def show_detailed_material_form(material_id: int = None):
             # 管理者モードまたは編集モード：直接materialsに保存
             try:
                 result = save_material(form_data, material_id=material_id if is_edit_mode else None)
-                if os.getenv("DEBUG", "0") == "1":
+                if _show_debug_ui():
                     st.success(f"DEBUG: save_material returned: {result}")
             except Exception as e:
                 import traceback
-                st.error(f"DEBUG: save_material exception: {e}")
-                st.code(traceback.format_exc())
+                if _show_debug_ui():
+                    st.error(f"DEBUG: save_material exception: {e}")
+                    st.code(traceback.format_exc())
+                else:
+                    st.error("材料の保存中にエラーが発生しました。")
                 st.stop()
             
             # 防御的にresult.get("ok")で分岐
